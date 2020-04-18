@@ -1,5 +1,5 @@
-﻿#include <Siv3D.hpp>
-#include "SasaGUI.h"
+#include <Siv3D.hpp>
+#include "SasaGUI.hpp"
 
 void Main()
 {
