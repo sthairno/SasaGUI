@@ -2889,7 +2889,7 @@ namespace s3d
 			bool radioButton(value_type& variable, const value_type& value, const String& label, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
-				ID id = getID(&label);
+				ID id = getID(&variable) + getID(label);
 				std::shared_ptr<RadioButtonCtrl> ctrl = getControl<RadioButtonCtrl>(window, id);
 				if (!ctrl)
 				{
