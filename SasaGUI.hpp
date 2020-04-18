@@ -2003,8 +2003,8 @@ namespace s3d
 			{
 				detail::ButtonBase m_button;
 				bool m_showItem;
-				String& m_value;
-				DropdownListCtrl(String& value) :m_value(value) {}
+				String m_valueText;
+
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
 					m_button.update(mgr.windowItemHovered() && rect.mouseOver(), MouseL.down(), MouseL.pressed(), getEnabled(wnd));
@@ -2021,7 +2021,7 @@ namespace s3d
 					rect.rounded(4)
 						.draw(m_button.getBackColor(theme))
 						.drawFrame(0, 1, m_button.getFrameColor(theme));
-					font(m_value).draw(rect.pos + Vec2(7, 4), m_button.getFontColor(theme));
+					font(m_valueText).draw(rect.pos + Vec2(7, 4), m_button.getFontColor(theme));
 
 					detail::drawTriangle(rect.rightCenter() - Vec2(7 + font.height() / 2, 0), font.height() / 4, 60_deg, m_button.getFontColor(theme));
 				}
@@ -3000,15 +3000,16 @@ namespace s3d
 			/// <summary>
 			/// ドロップダウンリスト
 			/// </summary>
-			bool dropdownList(String& value, const Array<String>& values, const bool enabled = true, Optional<Vec2> pos = unspecified)
+			template<class T>
+			bool dropdownList(T& value, const Array<T>& values, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				const auto& font = getTheme().font;
 				detail::Window& window = getCurrentWindow();
-				ID id = getID(&value);
+				ID id = getID(values);
 				std::shared_ptr<DropdownListCtrl> ctrl = getControl<DropdownListCtrl>(window, id);
 				if (!ctrl)
 				{
-					ctrl = std::make_shared<DropdownListCtrl>(value);
+					ctrl = std::make_shared<DropdownListCtrl>();
 					ctrl->rect.size.x = font(value).region().w;
 					ctrl->rect.size.y = font.height();
 					for (const auto& value : values)
@@ -3021,6 +3022,7 @@ namespace s3d
 				}
 				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
 				ctrl->enabled = enabled;
+				ctrl->m_valueText = Format(value);
 
 				bool valueChanged = false;
 				if (ctrl->m_showItem)
@@ -3029,10 +3031,12 @@ namespace s3d
 					windowSetPos(window.m_rect.pos + window.contentRect.pos + ctrl->rect.bl() + Vec2(0, 2));
 					for (size_t idx = 0; idx < values.size(); idx++)
 					{
-						if (menuItem(values[idx]))
+						const String text = Format(values[idx]);
+						if (menuItem(text))
 						{
-							ctrl->m_value = values[idx];
+							ctrl->m_valueText = text;
 							ctrl->m_showItem = false;
+							value = values[idx];
 							valueChanged = true;
 							break;
 						}
