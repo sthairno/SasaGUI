@@ -2404,7 +2404,7 @@ namespace s3d
 						for (const auto order : windowOrder[type])
 						{
 							auto& window = windows[order];
-							if (!(window.flags & WindowFlag::NoFocus))
+							if (!(window.flags & WindowFlag::Hide))
 							{
 								currentWindow = { order };
 								drawWindow(window);
@@ -3243,22 +3243,29 @@ namespace s3d
 					for (size_t idx = 0; idx < windows.size(); idx++)
 					{
 						auto& window = windows[idx];
-						label(U"    {}:"_fmt(idx));
-						label(U"    　id={}"_fmt(window.id));
-						label(U"    　title=\"{}\""_fmt(window.m_title));
-						label(U"    　flags={:#b}{}"_fmt(window.flags, String(idx, U' ')));
+						label(U"　　{}:"_fmt(idx));
+						label(U"　　　id={}"_fmt(window.id));
+						label(U"　　　title=\"{}\""_fmt(window.m_title));
+						label(U"　　　flags={:#b}{}"_fmt(window.flags, String(idx, U' ')));
 						if (itemHovered())
 						{
 							toolTipBegin();
 							windowSetLayoutType(LayoutType::Vertical);
-							int32 bit = 1;
-							for (const auto& name : { U"NoTitlebar",U"NoResize",U"NoMove",U"NoBackground",U"NoScrollbar",U"AutoResize",U"AlwaysForeground",U"NoFocus",U"NoMargin",U"Hide",U"Disable" })
+							if (window.flags)
 							{
-								if (window.flags & (1 << bit))
+								int32 bit = 1;
+								for (const auto& name : { U"NoTitlebar",U"NoResize",U"NoMove",U"NoBackground",U"NoScrollbar",U"AutoResize",U"AlwaysForeground",U"NoFocus",U"NoMargin",U"Hide",U"Disable" })
 								{
-									label(name);
+									if (window.flags & (1 << bit))
+									{
+										label(name);
+									}
+									bit++;
 								}
-								bit++;
+							}
+							else
+							{
+								label(U"None");
 							}
 							toolTipEnd();
 						}
