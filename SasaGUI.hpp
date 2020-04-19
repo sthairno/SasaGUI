@@ -387,9 +387,6 @@ namespace s3d
 				}
 			}
 
-			struct Window;
-			struct IControl;
-
 			//垂直スクロールバー
 			class VerticalScrollbar
 			{
@@ -1090,17 +1087,6 @@ namespace s3d
 				}
 			};
 
-			//グループ
-			struct Group
-			{
-				RectF rect;
-				String label;
-				bool frame;
-				Vec2 cursorBg;
-				Vec2 br;
-				bool enabled = true;
-			};
-
 			//ウィンドウの表示位置
 			enum WindowLayer
 			{
@@ -1115,6 +1101,10 @@ namespace s3d
 				Menu
 			};
 
+			struct Group;
+			struct IControl;
+
+			//ウィンドウ
 			struct Window
 			{
 				ID id;
@@ -1155,6 +1145,26 @@ namespace s3d
 				Array<size_t> groupStack;
 			};
 
+			//グループ
+			struct Group
+			{
+				RectF rect;
+				String label;
+				bool frame;
+				bool enabled = true;
+				Vec2 cursorBg;
+				Vec2 br;
+				Optional<size_t> parentIdx = unspecified;
+				bool getEnabled(const Window& wnd)
+				{
+					if (parentIdx)
+					{
+						return wnd.groups[*parentIdx].enabled && enabled;
+					}
+					return enabled;
+				}
+			};
+
 			struct IControl
 			{
 				ID m_id;
@@ -1164,7 +1174,7 @@ namespace s3d
 				bool enabled = true;
 				bool getEnabled(Window& wnd)
 				{
-					return enabled && wnd.groups[groupIdx].enabled && !(wnd.flags & WindowFlag::Disable);
+					return enabled && wnd.groups[groupIdx].getEnabled(wnd) && !(wnd.flags & WindowFlag::Disable);
 				}
 				virtual void update(GUIManager& mgr, Window& wnd) = 0;
 				virtual void draw(GUIManager& mgr, Window& wnd) = 0;
@@ -2405,16 +2415,22 @@ namespace s3d
 				}
 			}
 
-			void groupBegin(const String& label = U"", const bool& frame = false, const bool& enable = true)
+			void groupBegin(const String& label = U"", const bool& frame = false, const bool& enabled = true)
 			{
 				auto& window = getCurrentWindow();
 				auto& theme = getTheme();
 				//Print << U"{}groupBegin label=\"{}\""_fmt(String(window.groupStack.size() + 1, U'　'), label);
-				window.groups.push_back(detail::Group{ RectF(window.m_cursor), label, frame });
+				window.groups.push_back(detail::Group{ RectF(window.m_cursor,SizeF()), label, frame ,enabled});
 				auto idx = window.groups.size() - 1;
 				auto& group = window.groups[idx];
-				group.rect.pos = window.m_cursor;
-				group.enabled = enable;
+
+				if (window.groupStack)
+				{
+					group.parentIdx = window.groupStack[window.groupStack.size() - 1];
+				}
+				window.groupStack.push_back(idx);
+				
+				//カーソル移動
 				window.m_cursor = group.rect.pos + Vec2(window.ctrlMargin, window.ctrlMargin);
 				if (label.length() > 0)
 				{
@@ -2422,7 +2438,6 @@ namespace s3d
 				}
 				group.cursorBg = window.m_cursor;
 				group.br = window.m_cursor;
-				window.groupStack.push_back(idx);
 			}
 
 			void groupEnd()
