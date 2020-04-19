@@ -1515,6 +1515,15 @@ namespace s3d
 			{
 				const auto& theme = getTheme();
 				const auto titlebarHeight = theme.font.height();
+				//自動リサイズ
+				if (window.flags & WindowFlag::AutoResize)
+				{
+					window.m_rect.size = window.contentRect.size;
+					if (!(window.flags & WindowFlag::NoTitlebar))
+					{
+						window.m_rect.h += titlebarHeight;
+					}
+				}
 				//背景描画
 				if (!(window.flags & WindowFlag::NoBackground))
 				{
