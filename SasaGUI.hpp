@@ -999,11 +999,11 @@ namespace s3d
 			class ButtonBase
 			{
 			private:
-				bool m_hover;
-				bool m_grab;
-				bool m_down;
-				bool m_click;
-				bool m_enabled;
+				bool m_hover = false;
+				bool m_grab = false;
+				bool m_down = false;
+				bool m_click = false;
+				bool m_enabled = true;
 			public:
 				bool hover()
 				{
