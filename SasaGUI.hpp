@@ -2077,14 +2077,14 @@ namespace s3d
 					m_hueCircle = Circle(hueLine.begin.lerp(hueLine.end, m_color.h / 360.0), 10);
 					m_svGrip.update(hovered && m_svCircle.mouseOver(), MouseL.down(), MouseL.pressed(), enabled);
 					m_hueGrip.update(hovered && m_hueCircle.mouseOver(), MouseL.down(), MouseL.pressed(), enabled);
-					if (hovered && enabled)
+					if (enabled)
 					{
 						if (m_svGrip.grab())
 						{
 							m_color.s = Clamp(m_color.s + detail::CursorDeltaF().x / m_svRect.w, 0.0, 1.0);
 							m_color.v = Clamp(m_color.v - detail::CursorDeltaF().y / m_svRect.h, 0.0, 1.0);
 						}
-						else if (!m_svGrip.hover() && m_svRect.leftClicked())
+						else if (hovered && !m_svGrip.hover() && m_svRect.leftClicked())
 						{
 							m_color.s = Clamp((Cursor::PosF().x - m_svRect.x) / m_svRect.w, 0.0, 1.0);
 							m_color.v = Clamp(1 - (Cursor::PosF().y - m_svRect.y) / m_svRect.h, 0.0, 1.0);
@@ -2093,7 +2093,7 @@ namespace s3d
 						{
 							m_color.h = Clamp(m_color.h + detail::CursorDeltaF().y * 360.0 / hueLine.length(), 0.0, 360.0);
 						}
-						else if (!m_hueGrip.hover() && RectF(hueLine.begin - Vec2(10, 0), 20, hueLine.end.y + 1).leftClicked())
+						else if (hovered && !m_hueGrip.hover() && RectF(hueLine.begin - Vec2(10, 0), 20, hueLine.end.y + 1).leftClicked())
 						{
 							m_color.h = Clamp((Cursor::PosF().y - hueLine.begin.y) * 360.0 / (hueLine.end.y - hueLine.begin.y), 0.0, 360.0);
 						}
