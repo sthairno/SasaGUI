@@ -1116,6 +1116,7 @@ namespace s3d
 				WindowFlags prevFlags;
 				WindowLayer layer;
 				WindowType type = WindowType::Nomal;
+				bool itemHovered = false;
 
 				//Layout
 				double ctrlMargin;
@@ -1467,6 +1468,7 @@ namespace s3d
 					window.clientRect.y += titlebarHeight;
 					window.clientRect.h -= titlebarHeight;
 				}
+				window.itemHovered = window.clientRect.movedBy(window.m_rect.pos).mouseOver();
 				//スクロールバー処理
 				window.hScrollbar.m_rect = window.clientRect;
 				window.vScrollbar.m_rect = window.clientRect;
@@ -2420,7 +2422,7 @@ namespace s3d
 				auto& window = getCurrentWindow();
 				auto& theme = getTheme();
 				//Print << U"{}groupBegin label=\"{}\""_fmt(String(window.groupStack.size() + 1, U'　'), label);
-				window.groups.push_back(detail::Group{ RectF(window.m_cursor,SizeF()), label, frame ,enabled});
+				window.groups.push_back(detail::Group{ RectF(window.m_cursor,SizeF()), label, frame ,enabled });
 				auto idx = window.groups.size() - 1;
 				auto& group = window.groups[idx];
 
@@ -2429,7 +2431,7 @@ namespace s3d
 					group.parentIdx = window.groupStack[window.groupStack.size() - 1];
 				}
 				window.groupStack.push_back(idx);
-				
+
 				//カーソル移動
 				window.m_cursor = group.rect.pos + Vec2(window.ctrlMargin, window.ctrlMargin);
 				if (label.length() > 0)
@@ -2592,8 +2594,7 @@ namespace s3d
 			/// </summary>
 			bool windowItemHovered()
 			{
-				const auto& window = getCurrentWindow();
-				return window.clientRect.movedBy(window.m_rect.pos).intersects(Cursor::PosRaw()) && windowHovered();
+				return getCurrentWindow().itemHovered && windowHovered();
 			}
 
 			/// <summary>
