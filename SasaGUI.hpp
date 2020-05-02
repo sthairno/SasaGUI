@@ -306,7 +306,10 @@ namespace s3d
 				ScopedScissorRect(RectF rect, bool transform = true)
 					:m_oldScissorRect(Graphics2D::GetScissorRect())
 				{
-					rect.pos = Graphics2D::GetLocalTransform().transform(rect.pos);
+					if (transform)
+					{
+						rect.pos = Graphics2D::GetLocalTransform().transform(rect.pos);
+					}
 					auto newRect = rectAnd(rect, m_oldScissorRect);
 					if (newRect)
 					{
@@ -507,13 +510,13 @@ namespace s3d
 
 				bool m_enabled = true;
 
-				int32 m_selectBegin;
+				size_t m_selectBegin;
 
-				int32 m_selectEnd;
+				size_t m_selectEnd;
 
 				String m_selectStr;
 
-				int32 m_cursorIndex = 0;
+				size_t m_cursorIndex = 0;
 
 				double m_cursorBeginSec;
 
@@ -531,13 +534,13 @@ namespace s3d
 
 				String m_rawInput;
 
-				int32 getHoveringIndex()
+				size_t getHoveringIndex()
 				{
 					if (m_text)
 					{
 						const Vec2 mousePos = Cursor::PosF() - m_rect.pos - m_scroll - detail::TextBoxPadding;
 						Vec2 penPos(0, 0);
-						int32 index = 0;
+						size_t index = 0;
 						for (const auto& glyph : m_font(m_text))
 						{
 							if (mousePos.x >= penPos.x && mousePos.y >= penPos.y)
@@ -554,7 +557,7 @@ namespace s3d
 						}
 						if (mousePos.x >= penPos.x && mousePos.y >= penPos.y)
 						{
-							index = m_text.length();
+							index = static_cast<int32>(m_text.length());
 						}
 						return index;
 					}
@@ -564,7 +567,7 @@ namespace s3d
 					}
 				}
 
-				Vec2 getDrawPos(int32 index)
+				Vec2 getDrawPos(size_t index)
 				{
 					Vec2 penPos(0, 0);
 					if (m_text)
@@ -658,8 +661,8 @@ namespace s3d
 				{
 					if (isSelecting())
 					{
-						const int32 selectBg = Min(m_selectBegin, m_selectEnd);
-						const int32 selectEd = Max(m_selectBegin, m_selectEnd);
+						const size_t selectBg = Min(m_selectBegin, m_selectEnd);
+						const size_t selectEd = Max(m_selectBegin, m_selectEnd);
 						return m_text.substr(selectBg, selectEd - selectBg);
 					}
 					else
@@ -712,7 +715,6 @@ namespace s3d
 				//\rは\nに変換
 				void setText(const String& text)
 				{
-					size_t line = 0;
 					m_text = text.replaced(U'\r', U'\n');
 					m_isSelecting = false;
 					m_cursorIndex = 0;
@@ -720,7 +722,7 @@ namespace s3d
 				}
 
 				//更新処理
-				void update(bool hovered, RectF rect, bool enabled, bool lPressed = MouseL.pressed(), bool lDown = MouseL.down(), bool rPressed = MouseR.pressed(), bool rDown = MouseR.down())
+				void update(bool hovered, RectF rect, bool enabled, bool lPressed = MouseL.pressed(), bool lDown = MouseL.down(), bool rDown = MouseR.down())
 				{
 					m_rect = rect;
 					m_enabled = enabled;
@@ -749,8 +751,8 @@ namespace s3d
 					//キーボード入力
 					if (m_isActive)
 					{
-						const int32 hoveringIdx = getHoveringIndex();
-						const int32 previousCursorIndex = m_cursorIndex;
+						const size_t hoveringIdx = getHoveringIndex();
+						const size_t previousCursorIndex = m_cursorIndex;
 
 # if SIV3D_PLATFORM(MACOS)
 						const bool ctrlPressed = KeyCommand.pressed();
@@ -760,8 +762,8 @@ namespace s3d
 
 						procCommandKey(ctrlPressed);
 
-						Array<int32> linesLength;//各行の長さ
-						Point cursorPos(0, m_cursorIndex);//カーソルの行,列
+						Array<size_t> linesLength;//各行の長さ
+						Vector2D<size_t> cursorPos(0, m_cursorIndex);//カーソルの行,列
 						{
 							size_t bg = 0, ed;
 							ed = m_text.indexOf(U'\n', bg);
@@ -776,7 +778,7 @@ namespace s3d
 								}
 								ed = m_text.indexOf(U'\n', bg);
 							}
-							linesLength << m_text.length() - bg;
+							linesLength << static_cast<int32>(m_text.length()) - bg;
 						}
 
 						if (!ctrlPressed)
@@ -798,21 +800,22 @@ namespace s3d
 							if (cursorPos.x > 0 && detail::KeyRepeat(KeyUp))
 							{
 								m_cursorIndex -= cursorPos.y + 1;
-								m_cursorIndex -= Max(linesLength[cursorPos.x - 1] - cursorPos.y, 0);
+								m_cursorIndex -= Max<size_t>(linesLength[cursorPos.x - 1] - cursorPos.y, 0);
 								cursorPos.x--;
 							}
 							if (cursorPos.x < linesLength.size() - 1 && detail::KeyRepeat(KeyDown))
 							{
 								m_cursorIndex += linesLength[cursorPos.x] - cursorPos.y + 1;
-								m_cursorIndex += Min(cursorPos.y, linesLength[cursorPos.x + 1]);
+								m_cursorIndex += Min<size_t>(cursorPos.y, linesLength[cursorPos.x + 1]);
 								cursorPos.x++;
 							}
 						}
 						if (lPressed)
 						{
 							m_cursorIndex = hoveringIdx;
+							m_cursorIndex = hoveringIdx;
 						}
-						m_cursorIndex = Clamp<int32>(m_cursorIndex, 0, m_text.length());
+						m_cursorIndex = Clamp<size_t>(m_cursorIndex, 0, m_text.length());
 						//選択
 						if (m_cursorIndex == previousCursorIndex)
 						{
@@ -841,8 +844,8 @@ namespace s3d
 					}
 
 					//文字列入力
-					const int32 selectBg = Min(m_selectBegin, m_selectEnd);
-					const int32 selectEd = Max(m_selectBegin, m_selectEnd);
+					const size_t selectBg = Min(m_selectBegin, m_selectEnd);
+					const size_t selectEd = Max(m_selectBegin, m_selectEnd);
 					if (m_isSelecting)
 					{
 						if (m_rawInput)
@@ -937,8 +940,8 @@ namespace s3d
 				//描画処理
 				void draw(const GUITheme& theme)
 				{
-					const int32 selectBg = Min(m_selectBegin, m_selectEnd);
-					const int32 selectEd = Max(m_selectBegin, m_selectEnd);
+					const size_t selectBg = Min(m_selectBegin, m_selectEnd);
+					const size_t selectEd = Max(m_selectBegin, m_selectEnd);
 					bool showCursor = m_isActive && !(Periodic::Square0_1(1s, Scene::Time() - m_cursorBeginSec) == 0.0);
 					Vec2 penPos(m_rect.pos + m_scroll + detail::TextBoxPadding);
 					Optional<Vec2> cursorPos;
@@ -1170,13 +1173,13 @@ namespace s3d
 			struct IControl
 			{
 				ID m_id;
-				bool used;
-				RectF rect;
-				size_t groupIdx;
-				bool enabled = true;
+				bool m_used;
+				RectF m_rect;
+				size_t m_groupIdx;
+				bool m_enabled = true;
 				bool getEnabled(Window& wnd)
 				{
-					return enabled && wnd.groups[groupIdx].getEnabled(wnd) && !(wnd.flags & WindowFlag::Disable);
+					return m_enabled && wnd.groups[m_groupIdx].getEnabled(wnd) && !(wnd.flags & WindowFlag::Disable);
 				}
 				virtual void update(GUIManager& mgr, Window& wnd) = 0;
 				virtual void draw(GUIManager& mgr, Window& wnd) = 0;
@@ -1250,8 +1253,8 @@ namespace s3d
 			}
 			void updateControl(detail::Window& window, std::shared_ptr<detail::IControl> ctrl)
 			{
-				ctrl->used = true;
-				ctrl->groupIdx = window.groupStack[window.groupStack.size() - 1];// &window.groups[window.groups.size() - 1];
+				ctrl->m_used = true;
+				ctrl->m_groupIdx = window.groupStack[window.groupStack.size() - 1];// &window.groups[window.groups.size() - 1];
 				window.lastUsedCtrl = ctrl;
 			}
 			template<class T>
@@ -1514,7 +1517,7 @@ namespace s3d
 					Transformer2D transform(Mat3x2::Translate(window.m_rect.pos + window.contentRect.pos), true);
 					for (auto& control : window.controls)
 					{
-						control->used = false;
+						control->m_used = false;
 						control->update(*this, window);
 					}
 				}
@@ -1588,7 +1591,7 @@ namespace s3d
 						{
 							for (auto& control : controls)
 							{
-								if (control->rect.intersects(clientRect))
+								if (control->m_rect.intersects(clientRect))
 								{
 									control->draw(*this, window);
 								}
@@ -1609,10 +1612,10 @@ namespace s3d
 					if (debug_drawRect)
 					{
 						{
-							Transformer2D transform(Mat3x2::Translate(window.contentRect.pos));
+							Transformer2D transformDbg(Mat3x2::Translate(window.contentRect.pos));
 							for (const auto& control : controls)
 							{
-								control->rect.drawFrame(1, Palette::Pink);
+								control->m_rect.drawFrame(1, Palette::Pink);
 							}
 							for (const auto& group : window.groups)
 							{
@@ -1693,15 +1696,15 @@ namespace s3d
 				String text = U"";
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
-					m_button.update(mgr.windowItemHovered() && rect.mouseOver(), MouseL.down(), MouseL.pressed(), getEnabled(wnd));
+					m_button.update(mgr.windowItemHovered() && m_rect.mouseOver(), MouseL.down(), MouseL.pressed(), getEnabled(wnd));
 				}
-				void draw(GUIManager& mgr, detail::Window& wnd) override
+				void draw(GUIManager& mgr, detail::Window&) override
 				{
 					const auto& theme = mgr.getTheme();
-					rect.rounded(4)
+					m_rect.rounded(4)
 						.draw(m_button.getBackColor(theme))
 						.drawFrame(0, 1, m_button.getFrameColor(theme));
-					theme.font(text).draw(rect.pos + detail::TextButtonPadding, m_button.getFontColor(theme));
+					theme.font(text).draw(m_rect.pos + detail::TextButtonPadding, m_button.getFontColor(theme));
 				}
 			};
 
@@ -1713,15 +1716,15 @@ namespace s3d
 				ButtonTextureCtrl(const s3d::Texture& tex) :m_texture(tex) {}
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
-					m_button.update(mgr.windowItemHovered() && rect.mouseOver(), MouseL.down(), MouseL.pressed(), getEnabled(wnd));
+					m_button.update(mgr.windowItemHovered() && m_rect.mouseOver(), MouseL.down(), MouseL.pressed(), getEnabled(wnd));
 				}
-				void draw(GUIManager& mgr, detail::Window& wnd) override
+				void draw(GUIManager& mgr, detail::Window&) override
 				{
 					const auto& theme = mgr.getTheme();
-					rect.rounded(4)
+					m_rect.rounded(4)
 						.draw(m_button.getBackColor(theme))
 						.drawFrame(0, 1, m_button.getFrameColor(theme));
-					m_texture.draw(rect.pos + detail::ImageButtonPadding, m_color);
+					m_texture.draw(m_rect.pos + detail::ImageButtonPadding, m_color);
 				}
 			};
 
@@ -1729,7 +1732,7 @@ namespace s3d
 			{
 				Optional<ColorF> m_color;
 				String m_text;
-				void update(GUIManager& mgr, detail::Window& wnd) override
+				void update(GUIManager&, detail::Window&) override
 				{
 
 				}
@@ -1738,7 +1741,7 @@ namespace s3d
 					const auto& theme = mgr.getTheme();
 					const auto enabled = getEnabled(wnd);
 					ColorF col = m_color ? *m_color : (enabled ? theme.fontCol : theme.fontDisableCol);
-					theme.font(m_text).draw(rect.pos, col);
+					theme.font(m_text).draw(m_rect.pos, col);
 				}
 			};
 
@@ -1764,7 +1767,7 @@ namespace s3d
 						textbox.setText(m_text);
 						m_prevText = m_text;
 					}
-					textbox.update(hovered, rect, enabled);
+					textbox.update(hovered, m_rect, enabled);
 					if (textbox.textChanged())
 					{
 						m_text = textbox.getText();
@@ -1775,11 +1778,11 @@ namespace s3d
 				{
 					const auto& theme = mgr.getTheme();
 					const auto enabled = getEnabled(wnd);
-					rect.draw(enabled ? theme.textBoxCol : theme.textBoxDisableCol).drawFrame(0, 1, textbox.isActive() ? theme.textBoxActiveFrameCol : theme.textBoxFrameCol);
+					m_rect.draw(enabled ? theme.textBoxCol : theme.textBoxDisableCol).drawFrame(0, 1, textbox.isActive() ? theme.textBoxActiveFrameCol : theme.textBoxFrameCol);
 					textbox.draw(theme);
 					if (!textbox.isActive() && !m_text)
 					{
-						theme.font(m_hint).draw(rect.pos, Palette::Gray);
+						theme.font(m_hint).draw(m_rect.pos, Palette::Gray);
 					}
 				}
 			};
@@ -1789,12 +1792,12 @@ namespace s3d
 				ColorF color;
 				Texture texture;
 				ImageCtrl(const Texture& tex) :texture(tex) {}
-				void update(GUIManager& mgr, detail::Window& wnd) override
+				void update(GUIManager&, detail::Window&) override
 				{
 				}
-				void draw(GUIManager& mgr, detail::Window& wnd) override
+				void draw(GUIManager&, detail::Window&) override
 				{
-					texture.draw(rect.pos, color);
+					texture.draw(m_rect.pos, color);
 				}
 			};
 
@@ -1818,7 +1821,7 @@ namespace s3d
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
 					const auto enabled = getEnabled(wnd);
-					m_hovered = enabled && mgr.windowItemHovered() && rect.mouseOver();
+					m_hovered = enabled && mgr.windowItemHovered() && m_rect.mouseOver();
 					m_clicked = m_hovered && MouseL.down();
 
 					if (m_hovered)
@@ -1845,7 +1848,7 @@ namespace s3d
 							.draw(enabled ? (m_hovered ? theme.buttonHoverCol : theme.buttonBackCol) : theme.buttonDisableCol)
 							.drawFrame(1, 0, theme.buttonFrameCol);
 					}
-					theme.font(label).draw(rect.pos + Vec2(detail::CheckBoxRadioButtonSize + 3, 0), enabled ? theme.fontCol : theme.fontDisableCol);
+					theme.font(label).draw(m_rect.pos + Vec2(detail::CheckBoxRadioButtonSize + 3, 0), enabled ? theme.fontCol : theme.fontDisableCol);
 				}
 			};
 
@@ -1860,7 +1863,7 @@ namespace s3d
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
 					const auto enabled = getEnabled(wnd);
-					m_hovered = enabled && mgr.windowItemHovered() && rect.mouseOver();
+					m_hovered = enabled && mgr.windowItemHovered() && m_rect.mouseOver();
 					m_clicked = m_hovered && MouseL.down();
 
 					if (m_hovered)
@@ -1883,20 +1886,20 @@ namespace s3d
 							.draw(enabled ? (m_hovered ? theme.buttonHoverCol : theme.buttonBackCol) : theme.buttonDisableCol)
 							.drawFrame(1, 0, theme.buttonFrameCol);
 					}
-					theme.font(label).draw(rect.pos + Vec2(detail::CheckBoxRadioButtonSize + 3, 0), enabled ? theme.fontCol : theme.fontDisableCol);
+					theme.font(label).draw(m_rect.pos + Vec2(detail::CheckBoxRadioButtonSize + 3, 0), enabled ? theme.fontCol : theme.fontDisableCol);
 				}
 			};
 
 			struct CallbackCtrl : detail::IControl
 			{
 				std::function<void(RectF)> func;
-				void update(GUIManager& mgr, detail::Window& wnd) override
+				void update(GUIManager&, detail::Window&) override
 				{
 
 				}
-				void draw(GUIManager& mgr, detail::Window& wnd) override
+				void draw(GUIManager&, detail::Window&) override
 				{
-					func(rect);
+					func(m_rect);
 				}
 			};
 
@@ -1910,10 +1913,10 @@ namespace s3d
 				{
 					const auto font = mgr.getTheme().font;
 					const auto enabled = getEnabled(wnd);
-					auto pos = rect.pos;
+					auto pos = m_rect.pos;
 					for (size_t idx = 0; idx < names.size(); idx++)
 					{
-						auto tabRect = m_tabRect[idx].movedBy(rect.pos);
+						auto tabRect = m_tabRect[idx].movedBy(m_rect.pos);
 						auto& button = m_tabButtons[idx];
 						button.update(mgr.windowItemHovered() && tabRect.mouseOver(), MouseL.down(), MouseL.pressed(), enabled);
 						if (button.down())
@@ -1926,25 +1929,25 @@ namespace s3d
 				{
 					const auto& theme = mgr.getTheme();
 					const auto font = theme.font;
-					const auto& group = wnd.groups[groupIdx];
+					const auto& group = wnd.groups[m_groupIdx];
 					const auto enabled = getEnabled(wnd);
 					for (size_t idx = 0; idx < names.size(); idx++)
 					{
-						auto tabRect = m_tabRect[idx].movedBy(rect.pos);
+						auto tabRect = m_tabRect[idx].movedBy(m_rect.pos);
 						auto& button = m_tabButtons[idx];
 						tabRect.rounded(4, 4, 0, 0)
 							.drawFrame(2, button.getFrameColor(theme))
 							.draw(idx == current ? theme.windowBackCol : button.getBackColor(theme));
 						font(names[idx]).draw(tabRect.pos + detail::TabItemPadding, idx == current ? (enabled ? theme.fontCol : theme.fontDisableCol) : button.getFontColor(theme));
 					}
-					auto currentTabRect = m_tabRect[current].movedBy(rect.pos);
+					auto currentTabRect = m_tabRect[current].movedBy(m_rect.pos);
 					currentTabRect.bottom().movedBy(0, 0.5).draw(theme.windowBackCol);
-					Line(rect.x - 1, rect.y + rect.h, currentTabRect.bl()).movedBy(0, 0.5).draw(theme.frameCol);
-					Line(currentTabRect.br(), group.rect.x + group.rect.w - wnd.ctrlMargin, rect.y + rect.h)
+					Line(m_rect.x - 1, m_rect.y + m_rect.h, currentTabRect.bl()).movedBy(0, 0.5).draw(theme.frameCol);
+					Line(currentTabRect.br(), group.rect.x + group.rect.w - wnd.ctrlMargin, m_rect.y + m_rect.h)
 						.movedBy(0, 0.5).draw(theme.frameCol);
 					/*RectF(
-						rect.br(),
-						group.br.x - rect.x - rect.w - wnd.ctrlMargin,
+						m_rect.br(),
+						group.br.x - m_rect.x - m_rect.w - wnd.ctrlMargin,
 						1
 					).draw(theme.frameCol);*/
 				}
@@ -1961,9 +1964,9 @@ namespace s3d
 				Stopwatch m_hoverstw;
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
-					const auto& group = wnd.groups[groupIdx];
+					const auto& group = wnd.groups[m_groupIdx];
 					const bool enabled = getEnabled(wnd);
-					RectF backRect(rect.pos, group.br.x - rect.x - wnd.ctrlMargin, rect.h);
+					RectF backRect(m_rect.pos, group.br.x - m_rect.x - wnd.ctrlMargin, m_rect.h);
 					bool prevHovered = m_hovered;
 					m_hovered = enabled && mgr.windowItemHovered() && backRect.mouseOver();
 					m_clicked = m_hovered && MouseL.down();
@@ -1993,9 +1996,9 @@ namespace s3d
 				{
 					const auto& theme = mgr.getTheme();
 					const auto& font = theme.font;
-					const auto& group = wnd.groups[groupIdx];
+					const auto& group = wnd.groups[m_groupIdx];
 					const bool enabled = getEnabled(wnd);
-					RectF backRect(rect.pos, group.br.x - rect.x - wnd.ctrlMargin, rect.h);
+					RectF backRect(m_rect.pos, group.br.x - m_rect.x - wnd.ctrlMargin, m_rect.h);
 					ColorF fontCol;
 
 					if (!enabled)
@@ -2012,7 +2015,7 @@ namespace s3d
 						fontCol = theme.fontCol;
 					}
 
-					font(m_text).draw(rect.pos, fontCol);
+					font(m_text).draw(m_rect.pos, fontCol);
 					font(m_subtext).draw(Arg::topRight = backRect.tr() - Vec2(font.height() / 2, 0), Palette::Gray);
 					if (m_hasSubItem)
 					{
@@ -2029,23 +2032,23 @@ namespace s3d
 
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
-					m_button.update(mgr.windowItemHovered() && rect.mouseOver(), MouseL.down(), MouseL.pressed(), getEnabled(wnd));
+					m_button.update(mgr.windowItemHovered() && m_rect.mouseOver(), MouseL.down(), MouseL.pressed(), getEnabled(wnd));
 					if (m_button.click())
 					{
 						m_showItem = !m_showItem;
 					}
 				}
-				void draw(GUIManager& mgr, detail::Window& wnd) override
+				void draw(GUIManager& mgr, detail::Window&) override
 				{
 					const auto& theme = mgr.getTheme();
 					const auto& font = theme.font;
 
-					rect.rounded(4)
+					m_rect.rounded(4)
 						.draw(m_button.getBackColor(theme))
 						.drawFrame(0, 1, m_button.getFrameColor(theme));
-					font(m_valueText).draw(rect.pos + Vec2(7, 4), m_button.getFontColor(theme));
+					font(m_valueText).draw(m_rect.pos + Vec2(7, 4), m_button.getFontColor(theme));
 
-					detail::drawTriangle(rect.rightCenter() - Vec2(7 + font.height() / 2, 0), font.height() / 4, 60_deg, m_button.getFontColor(theme));
+					detail::drawTriangle(m_rect.rightCenter() - Vec2(7 + font.height() / 2, 0), font.height() / 4, 60_deg, m_button.getFontColor(theme));
 				}
 			};
 
@@ -2074,7 +2077,7 @@ namespace s3d
 					const auto hovered = mgr.windowItemHovered();
 					const auto enabled = getEnabled(wnd);
 					const auto prevCol = m_color;
-					m_svRect.pos = rect.pos + Vec2(10, 10);
+					m_svRect.pos = m_rect.pos + Vec2(10, 10);
 					const Line hueLine(m_svRect.tr() + Vec2(20, 10), m_svRect.br() + Vec2(20, -10));
 					m_svCircle = Circle(m_svRect.pos + Vec2(m_color.s, 1 - m_color.v) * (m_svRect.size - Vec2(1, 1)), 10);
 					m_hueCircle = Circle(hueLine.begin.lerp(hueLine.end, m_color.h / 360.0), 10);
@@ -2103,7 +2106,7 @@ namespace s3d
 					}
 					m_colorChanged = m_color != prevCol;
 				}
-				void draw(GUIManager& mgr, detail::Window& wnd) override
+				void draw(GUIManager& mgr, detail::Window&) override
 				{
 					const auto& theme = mgr.getTheme();
 					const Line hueLine(m_svRect.tr() + Vec2(20, 10), m_svRect.br() + Vec2(20, -10));
@@ -2129,9 +2132,9 @@ namespace s3d
 				String text;
 				bool m_clicked;
 				bool m_hovered;
-				void update(GUIManager& mgr, detail::Window& wnd) override
+				void update(GUIManager& mgr, detail::Window&) override
 				{
-					m_hovered = mgr.windowItemHovered() && rect.mouseOver();
+					m_hovered = mgr.windowItemHovered() && m_rect.mouseOver();
 					m_clicked = m_hovered && MouseL.down();
 
 					if (m_hovered)
@@ -2139,10 +2142,10 @@ namespace s3d
 						Cursor::RequestStyle(CursorStyle::Hand);
 					}
 				}
-				void draw(GUIManager& mgr, detail::Window& wnd) override
+				void draw(GUIManager& mgr, detail::Window&) override
 				{
-					mgr.getTheme().font(text).draw(rect.pos, Palette::Blue);
-					rect.bottom().draw(Palette::Blue);
+					mgr.getTheme().font(text).draw(m_rect.pos, Palette::Blue);
+					m_rect.bottom().draw(Palette::Blue);
 				}
 			};
 
@@ -2157,13 +2160,13 @@ namespace s3d
 
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
-					const SizeF gripSize(10, rect.h);
-					const double lineY = rect.y + (rect.h - 1) / 2;
+					const SizeF gripSize(10, m_rect.h);
+					const double lineY = m_rect.y + (m_rect.h - 1) / 2;
 					const double prevPer = m_per;
 					const bool enabled = getEnabled(wnd);
 					m_valueChanged = false;
 
-					m_line = Line(rect.x + gripSize.x / 2, lineY, rect.x + rect.w - gripSize.x / 2, lineY);
+					m_line = Line(m_rect.x + gripSize.x / 2, lineY, m_rect.x + m_rect.w - gripSize.x / 2, lineY);
 					m_gripRect = RectF(Arg::center = m_line.begin.lerp(m_line.end, m_per), gripSize);
 					m_grip.update(mgr.windowItemHovered() && m_gripRect.mouseOver(), MouseL.down(), MouseL.pressed(), enabled);
 
@@ -2171,7 +2174,7 @@ namespace s3d
 					{
 						m_per += detail::CursorDeltaF().x / m_line.length();
 					}
-					else if (enabled && rect.leftClicked() && mgr.windowItemHovered())
+					else if (enabled && m_rect.leftClicked() && mgr.windowItemHovered())
 					{
 						m_per = (Cursor::PosF().x - m_line.begin.x) / (m_line.end.x - m_line.begin.x + 1);
 					}
@@ -2212,10 +2215,10 @@ namespace s3d
 					const bool enabled = getEnabled(wnd);
 					bool prevActive = m_textBox.isActive();
 
-					const SizeF btnSize(20, (rect.h - 1) / 2);
-					m_upRect = RectF(rect.x + rect.w - btnSize.x, rect.y, btnSize);
-					m_downRect = RectF(rect.x + rect.w - btnSize.x, rect.y + btnSize.y + 1, btnSize);
-					m_textBoxRect = rect;
+					const SizeF btnSize(20, (m_rect.h - 1) / 2);
+					m_upRect = RectF(m_rect.x + m_rect.w - btnSize.x, m_rect.y, btnSize);
+					m_downRect = RectF(m_rect.x + m_rect.w - btnSize.x, m_rect.y + btnSize.y + 1, btnSize);
+					m_textBoxRect = m_rect;
 					m_textBoxRect.w -= btnSize.x + 1;
 
 					m_up.update(hovered && m_upRect.mouseOver(), detail::KeyRepeat(MouseL), MouseL.pressed(), enabled);
@@ -2234,7 +2237,7 @@ namespace s3d
 					const auto& theme = mgr.getTheme();
 					const auto& font = theme.font;
 					const bool enabled = getEnabled(wnd);
-					rect.draw(enabled ? theme.textBoxCol : theme.textBoxDisableCol).drawFrame(0, 1, m_textBox.isActive() ? theme.textBoxActiveFrameCol : theme.textBoxFrameCol);
+					m_rect.draw(enabled ? theme.textBoxCol : theme.textBoxDisableCol).drawFrame(0, 1, m_textBox.isActive() ? theme.textBoxActiveFrameCol : theme.textBoxFrameCol);
 
 					m_upRect
 						.draw(m_up.getBackColor(theme))
@@ -2248,7 +2251,7 @@ namespace s3d
 
 					detail::drawTriangle(m_downRect.center(), font.height() / 8, 60_deg, m_down.getFontColor(theme));
 
-					rect.drawFrame(0, 1, m_textBox.isActive() ? theme.textBoxActiveFrameCol : theme.textBoxFrameCol);
+					m_rect.drawFrame(0, 1, m_textBox.isActive() ? theme.textBoxActiveFrameCol : theme.textBoxFrameCol);
 
 					m_textBox.draw(theme);
 				}
@@ -2256,16 +2259,16 @@ namespace s3d
 
 			struct SplitCtrl : detail::IControl
 			{
-				void update(GUIManager& mgr, detail::Window& wnd) override
+				void update(GUIManager&, detail::Window&) override
 				{
 
 				}
 				void draw(GUIManager& mgr, detail::Window& wnd) override
 				{
-					const auto& group = wnd.groups[groupIdx];
+					const auto& group = wnd.groups[m_groupIdx];
 					RectF(
-						rect.pos,
-						group.br.x - rect.x - wnd.ctrlMargin,
+						m_rect.pos,
+						group.br.x - m_rect.x - wnd.ctrlMargin,
 						1
 					).draw(mgr.getTheme().frameCol);
 				}
@@ -2275,18 +2278,17 @@ namespace s3d
 			{
 				ColorF m_color;
 				double m_per;
-				void update(GUIManager& mgr, detail::Window& wnd) override
+				void update(GUIManager&, detail::Window&) override
 				{
 
 				}
 				void draw(GUIManager& mgr, detail::Window& wnd) override
 				{
-					const auto& group = wnd.groups[groupIdx];
-					const double barWidth = rect.w * m_per;
+					const double barWidth = m_rect.w * m_per;
 					const auto& theme = mgr.getTheme();
 					const auto enabled = getEnabled(wnd);
-					rect.draw(theme.progressBarCol).drawFrame(0, 1, theme.frameCol);
-					RectF(rect.pos, barWidth, rect.h).draw(enabled ? m_color : theme.accentDisableCol);
+					m_rect.draw(theme.progressBarCol).drawFrame(0, 1, theme.frameCol);
+					RectF(m_rect.pos, barWidth, m_rect.h).draw(enabled ? m_color : theme.accentDisableCol);
 				}
 			};
 
@@ -2296,10 +2298,9 @@ namespace s3d
 				bool m_expand;
 				bool m_hovered;
 				bool m_clicked;
-				void update(GUIManager& mgr, detail::Window& wnd) override
+				void update(GUIManager& mgr, detail::Window&) override
 				{
-					const auto& group = wnd.groups[groupIdx];
-					m_hovered = mgr.windowItemHovered() && rect.mouseOver();
+					m_hovered = mgr.windowItemHovered() && m_rect.mouseOver();
 					m_clicked = m_hovered && MouseL.down();
 					if (m_clicked)
 					{
@@ -2312,12 +2313,11 @@ namespace s3d
 				}
 				void draw(GUIManager& mgr, detail::Window& wnd) override
 				{
-					const auto& group = wnd.groups[groupIdx];
 					const auto& theme = mgr.getTheme();
 					const auto enabled = getEnabled(wnd);
 					const auto fontCol = enabled ? theme.fontCol : theme.buttonDisableFontCol;
-					detail::drawTriangle(rect.leftCenter() + Vec2(detail::TreeNodePadding.x + theme.font.height() / 2, 0), theme.font.height() / 4, m_expand ? 0_deg : 60_deg, fontCol);
-					theme.font(m_text).draw(rect.pos + detail::TreeNodePadding + Vec2(theme.font.height(), 0), fontCol);
+					detail::drawTriangle(m_rect.leftCenter() + Vec2(detail::TreeNodePadding.x + theme.font.height() / 2, 0), theme.font.height() / 4, m_expand ? 0_deg : 60_deg, fontCol);
+					theme.font(m_text).draw(m_rect.pos + detail::TreeNodePadding + Vec2(theme.font.height(), 0), fontCol);
 				}
 			};
 		public:
@@ -2418,7 +2418,7 @@ namespace s3d
 				{
 					auto& window = windows[idx];
 					currentWindow = { idx };
-					window.controls.remove_if([&](std::shared_ptr<detail::IControl> ctrl) {return !ctrl->used; });
+					window.controls.remove_if([&](std::shared_ptr<detail::IControl> ctrl) {return !ctrl->m_used; });
 					while (window.groupStack.size())
 					{
 						groupEnd();
@@ -2802,7 +2802,7 @@ namespace s3d
 				if (window.lastUsedCtrl)
 				{
 					return windowItemHovered() &&
-						window.lastUsedCtrl->rect.movedBy(window.m_rect.pos + window.contentRect.pos).mouseOver();
+						window.lastUsedCtrl->m_rect.movedBy(window.m_rect.pos + window.contentRect.pos).mouseOver();
 				}
 				return false;
 			}
@@ -2822,12 +2822,12 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<ButtonStringCtrl>();
-					ctrl->rect.size = getTheme().font(text).region().size + detail::TextButtonPadding * 2;
+					ctrl->m_rect.size = getTheme().font(text).region().size + detail::TextButtonPadding * 2;
 					ctrl->text = text;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				return ctrl->m_button.click();
 			}
 			/// <summary>
@@ -2846,11 +2846,11 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<ButtonTextureCtrl>(texture);
-					ctrl->rect.size = texture.size() + detail::ImageButtonPadding * 2;
+					ctrl->m_rect.size = texture.size() + detail::ImageButtonPadding * 2;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->m_color = color;
 				return ctrl->m_button.click();
 			}
@@ -2869,11 +2869,11 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<LabelCtrl>();
-					ctrl->rect.size = getTheme().font(text).region().size;
+					ctrl->m_rect.size = getTheme().font(text).region().size;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->m_text = text;
 				ctrl->m_color = color;
 			}
@@ -2897,11 +2897,11 @@ namespace s3d
 					ctrl = std::make_shared<TextBoxCtrl>(text, theme.font, flags);
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.w = width;
-				ctrl->rect.h = theme.font.height() * ((flags & TextInputFlag::MultiLine) ? lineCnt : 1);
-				ctrl->rect.h += detail::TextBoxPadding.y * 2;
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.w = width;
+				ctrl->m_rect.h = theme.font.height() * ((flags & TextInputFlag::MultiLine) ? lineCnt : 1);
+				ctrl->m_rect.h += detail::TextBoxPadding.y * 2;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->m_hint = hint;
 				return ctrl->textbox.textChanged();
 			}
@@ -2923,11 +2923,11 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<ImageCtrl>(texture);
-					ctrl->rect.size = texture.size();
+					ctrl->m_rect.size = texture.size();
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->color = color;
 			}
 			/// <summary>
@@ -2945,15 +2945,15 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<CheckBoxCtrl>(checked);
-					ctrl->rect.size = getTheme().font(label).region().size;
-					ctrl->rect.w += detail::CheckBoxRadioButtonSize + 3;
-					ctrl->rect.h = Max(ctrl->rect.h, detail::CheckBoxRadioButtonSize);
+					ctrl->m_rect.size = getTheme().font(label).region().size;
+					ctrl->m_rect.w += detail::CheckBoxRadioButtonSize + 3;
+					ctrl->m_rect.h = Max(ctrl->m_rect.h, detail::CheckBoxRadioButtonSize);
 					ctrl->label = label;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
-				ctrl->checkRect = RectF(Arg::leftCenter = ctrl->rect.leftCenter(), detail::CheckBoxRadioButtonSize);
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
+				ctrl->checkRect = RectF(Arg::leftCenter = ctrl->m_rect.leftCenter(), detail::CheckBoxRadioButtonSize);
 				return ctrl->m_clicked;
 			}
 			/// <summary>
@@ -2974,15 +2974,15 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<RadioButtonCtrl>();
-					ctrl->rect.size = getTheme().font(label).region().size;
-					ctrl->rect.w += detail::CheckBoxRadioButtonSize + 3;
-					ctrl->rect.h = Max(ctrl->rect.h, detail::CheckBoxRadioButtonSize);
+					ctrl->m_rect.size = getTheme().font(label).region().size;
+					ctrl->m_rect.w += detail::CheckBoxRadioButtonSize + 3;
+					ctrl->m_rect.h = Max(ctrl->m_rect.h, detail::CheckBoxRadioButtonSize);
 					ctrl->label = label;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
-				ctrl->circle = Circle(Arg::leftCenter = ctrl->rect.leftCenter(), detail::CheckBoxRadioButtonSize / 2);
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
+				ctrl->circle = Circle(Arg::leftCenter = ctrl->m_rect.leftCenter(), detail::CheckBoxRadioButtonSize / 2);
 				ctrl->checkCircle = Circle(ctrl->circle.center, ctrl->circle.r - 4);
 				if (ctrl->m_clicked)
 				{
@@ -3003,9 +3003,9 @@ namespace s3d
 				detail::Window& window = getCurrentWindow();
 				auto ctrl = std::make_shared<CallbackCtrl>();
 				addControl(window, ctrl, 0);
-				ctrl->rect.size = size;
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.size = size;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->func = func;
 			}
 			/// <summary>
@@ -3031,8 +3031,8 @@ namespace s3d
 					ctrl->names = names;
 					ctrl->m_tabButtons = Array<detail::ButtonBase>(names.size());
 					ctrl->current = 0;
-					ctrl->rect.w = 0;
-					ctrl->rect.h = theme.font.height() + detail::TabItemPadding.y * 2;
+					ctrl->m_rect.w = 0;
+					ctrl->m_rect.h = theme.font.height() + detail::TabItemPadding.y * 2;
 					Vec2 rectPos(0, 0);
 					for (const auto& name : names)
 					{
@@ -3040,12 +3040,12 @@ namespace s3d
 						rect.size += detail::TabItemPadding * 2;
 						ctrl->m_tabRect << rect;
 						rectPos.x += rect.w + 1;
-						ctrl->rect.w += rect.w + 1;
+						ctrl->m_rect.w += rect.w + 1;
 					}
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				return ctrl->current;
 			}
 			/// <summary>
@@ -3066,18 +3066,18 @@ namespace s3d
 				{
 					const auto& theme = getTheme();
 					ctrl = std::make_shared<MenuItemCtrl>();
-					ctrl->rect.w =
+					ctrl->m_rect.w =
 						theme.font(text).region().size.x +
 						theme.font(subtext).region().size.x +
 						theme.font.height() / 2;
-					ctrl->rect.h = theme.font.height();
+					ctrl->m_rect.h = theme.font.height();
 					ctrl->m_hasSubItem = subitem;
 					ctrl->m_text = text;
 					ctrl->m_subtext = subtext;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				if (ctrl->m_hasSubItem)
 				{
 					return ctrl->m_showSubItem;
@@ -3109,25 +3109,25 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<DropdownListCtrl>();
-					ctrl->rect.size.x = font(value).region().w;
-					ctrl->rect.size.y = font.height();
-					for (const auto& value : values)
+					ctrl->m_rect.size.x = font(value).region().w;
+					ctrl->m_rect.size.y = font.height();
+					for (const auto& val : values)
 					{
-						ctrl->rect.size.x = Max<double>(ctrl->rect.size.x, font(value).region().w);
+						ctrl->m_rect.size.x = Max<double>(ctrl->m_rect.size.x, font(val).region().w);
 					}
-					ctrl->rect.size += SizeF(14 + font.height(), 8);
+					ctrl->m_rect.size += SizeF(14 + font.height(), 8);
 					ctrl->m_showItem = false;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->m_valueText = Format(value);
 
 				bool valueChanged = false;
 				if (ctrl->m_showItem)
 				{
 					windowBegin(id, U"", dropdownlistFlags);
-					windowSetPos(window.m_rect.pos + window.contentRect.pos + ctrl->rect.bl() + Vec2(0, 2));
+					windowSetPos(window.m_rect.pos + window.contentRect.pos + ctrl->m_rect.bl() + Vec2(0, 2));
 					for (size_t idx = 0; idx < values.size(); idx++)
 					{
 						const String text = Format(values[idx]);
@@ -3160,12 +3160,12 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<ColorpickerCtrl>(hsv);
-					ctrl->rect.size = SizeF(240, 220);
+					ctrl->m_rect.size = SizeF(240, 220);
 					ctrl->m_svRect.size = SizeF(200, 200);
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				return ctrl->m_colorChanged;
 			}
 			/// <summary>
@@ -3192,11 +3192,11 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<LinkCtrl>();
-					ctrl->rect.size = getTheme().font(text).region().size;
+					ctrl->m_rect.size = getTheme().font(text).region().size;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->text = text;
 				return ctrl->m_clicked;
 			}
@@ -3216,12 +3216,12 @@ namespace s3d
 				if (!ctrl)
 				{
 					ctrl = std::make_shared<SliderCtrl>();
-					ctrl->rect.size = SizeF(width, 20);
+					ctrl->m_rect.size = SizeF(width, 20);
 					ctrl->m_prevVal = value;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				if (ctrl->m_valueChanged)
 				{
 					value = min + static_cast<T>(ctrl->m_per * static_cast<double>(max - min));
@@ -3258,11 +3258,11 @@ namespace s3d
 					ctrl->m_prevVal = value;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.w = width;
-				ctrl->rect.h = getTheme().font.height();
-				ctrl->rect.h += detail::TextBoxPadding.y * 2;
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.w = width;
+				ctrl->m_rect.h = getTheme().font.height();
+				ctrl->m_rect.h += detail::TextBoxPadding.y * 2;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				//テキストが変わったとき
 				if (ctrl->m_valueChanged)
 				{
@@ -3296,9 +3296,9 @@ namespace s3d
 			{
 				detail::Window& window = getCurrentWindow();
 				auto ctrl = std::make_shared<SplitCtrl>();
-				ctrl->rect.size = SizeF(1, 1);
+				ctrl->m_rect.size = SizeF(1, 1);
 				addControl(window, ctrl, 0);
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
 			}
 			/// <summary>
 			/// プログレスバー
@@ -3315,10 +3315,10 @@ namespace s3d
 			{
 				detail::Window& window = getCurrentWindow();
 				auto ctrl = std::make_shared<ProgressBarCtrl>();
-				ctrl->rect.size = SizeF(width, 10);
+				ctrl->m_rect.size = SizeF(width, 10);
 				addControl(window, ctrl, getID(&value));
-				ctrl->rect.pos = calcPos(window, unspecified, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->m_color = color ? *color : getTheme().accentCol;
 				ctrl->m_per = Clamp(static_cast<double>(value - min) / static_cast<double>(max - min), 0.0, 1.0);
 			}
@@ -3337,13 +3337,13 @@ namespace s3d
 				{
 					const auto& theme = getTheme();
 					ctrl = std::make_shared<TreeNodeCtrl>();
-					ctrl->rect.size = theme.font(text).region().size + detail::TreeNodePadding * 2;
-					ctrl->rect.w += theme.font.height();
+					ctrl->m_rect.size = theme.font(text).region().size + detail::TreeNodePadding * 2;
+					ctrl->m_rect.w += theme.font.height();
 					ctrl->m_expand = expand;
 					addControl(window, ctrl, id);
 				}
-				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
-				ctrl->enabled = enabled;
+				ctrl->m_rect.pos = calcPos(window, pos, ctrl->m_rect.size);
+				ctrl->m_enabled = enabled;
 				ctrl->m_text = text;
 				return ctrl->m_expand;
 			}
