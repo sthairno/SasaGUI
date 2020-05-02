@@ -2778,9 +2778,10 @@ namespace s3d
 			/// <summary>
 			/// ボタン
 			/// </summary>
-			/// <param name="text"></param>
-			/// <param name="enabled"></param>
-			/// <param name="pos"></param>
+			/// <param name="text">ボタン内に表示するテキスト</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>ボタンが押されたらtrue,それ以外はfalse</returns>
 			bool button(const String& text, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -2800,9 +2801,11 @@ namespace s3d
 			/// <summary>
 			/// ボタン
 			/// </summary>
-			/// <param name="texture"></param>
-			/// <param name="color"></param>
-			/// <param name="pos"></param>
+			/// <param name="texture">ボタン内に表示するテクスチャ</param>
+			/// <param name="color">テクスチャに乗算する色</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>ボタンが押されたらtrue,それ以外はfalse</returns>
 			bool button(const Texture& texture, const ColorF& color = Palette::White, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -2822,9 +2825,10 @@ namespace s3d
 			/// <summary>
 			/// ラベル
 			/// </summary>
-			/// <param name="text"></param>
-			/// <param name="color"></param>
-			/// <param name="pos"></param>
+			/// <param name="text">表示するテキスト</param>
+			/// <param name="color">テキストの色,unspecifiedでテーマに従う</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
 			void label(const String& text, Optional<ColorF> color = unspecified, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -2844,6 +2848,12 @@ namespace s3d
 			/// <summary>
 			/// テキストボックス
 			/// </summary>
+			/// <param name="text">値を編集する変数</param>
+			/// <param name="hint">文字列が空のときに表示するテキスト</param>
+			/// <param name="flags">テキストボックスのフラグ(TextInputFlag)</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>テキストが変更されたらtrue,それ以外はfalse</returns>
 			bool textBox(String& text, const String& hint = U"", const int32 flags = TextInputFlag::All, const double width = 200, const int32 lineCnt = 3, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -2866,6 +2876,9 @@ namespace s3d
 			/// <summary>
 			/// 画像
 			/// </summary>
+			/// <param name="texture">表示するテクスチャ</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
 			void image(const Texture& texture, const ColorF& color = Palette::White, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				if (texture.isEmpty())
@@ -2888,6 +2901,10 @@ namespace s3d
 			/// <summary>
 			/// チェックボックス
 			/// </summary>
+			/// <param name="checked">値を変更する変数</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>値が変わったらtrue,それ以外はfalse</returns>
 			bool checkBox(bool& checked, const String& label, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -2910,6 +2927,12 @@ namespace s3d
 			/// <summary>
 			/// ラジオボタン
 			/// </summary>
+			/// <param name="variable">値を変更する変数</param>
+			/// <param name="value">選択状態にする条件(variable==valueのとき選択状態になります)</param>
+			/// <param name="label">表示するテキスト</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>選択状態のときtrue,それ以外のときfalse</returns>
 			template<class value_type>
 			bool radioButton(value_type& variable, const value_type& value, const String& label, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
@@ -2939,6 +2962,10 @@ namespace s3d
 			/// <summary>
 			/// コールバック関数
 			/// </summary>
+			/// <param name="func">描画時に呼び出すコールバック関数(RectF:描画する領域)</param>
+			/// <param name="size">描画する大きさ</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
 			void callback(const std::function<void(RectF)>& func, SizeF size, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -2952,6 +2979,10 @@ namespace s3d
 			/// <summary>
 			/// タブ
 			/// </summary>
+			/// <param name="names">各タブの名前を格納した配列</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>選択されているタブのインデックス番号</returns>
 			size_t tab(const Array<String>& names, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				if (names.size() == 0)
@@ -2988,6 +3019,12 @@ namespace s3d
 			/// <summary>
 			/// メニュー要素
 			/// </summary>
+			/// <param name="text">表示するテキスト</param>
+			/// <param name="subtext">追加情報を表示するテキスト</param>
+			/// <param name="subitem">子のメニューを持っているか</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>subitemがfalseのとき,押されたらtrue、subitemがtrueのとき,子メニューが表示されるときtrue</returns>
 			bool menuItem(const String& text, const String& subtext = U"", bool subitem = false, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -3025,6 +3062,11 @@ namespace s3d
 			/// <summary>
 			/// ドロップダウンリスト
 			/// </summary>
+			/// <param name="value">値を変更する変数</param>
+			/// <param name="values">値の候補を格納した配列</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>値が変更されたときtrue,それ以外のときfalse</returns>
 			template<class T>
 			bool dropdownList(T& value, const Array<T>& values, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
@@ -3074,9 +3116,10 @@ namespace s3d
 			/// <summary>
 			/// カラーピッカー
 			/// </summary>
-			/// <param name="hsv"></param>
-			/// <param name="pos"></param>
-			/// <returns></returns>
+			/// <param name="hsv">色を変更する変数</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>値が変更されたときtrue,それ以外のときfalse</returns>
 			bool colorPicker(HSV& hsv, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -3096,8 +3139,8 @@ namespace s3d
 			/// <summary>
 			/// スペース
 			/// </summary>
-			/// <param name="size"></param>
-			/// <param name="pos"></param>
+			/// <param name="size">大きさ</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
 			void space(const SizeF& size, Optional<Vec2> pos = unspecified)
 			{
 				calcPos(getCurrentWindow(), pos, size);
@@ -3105,9 +3148,10 @@ namespace s3d
 			/// <summary>
 			/// リンク
 			/// </summary>
-			/// <param name="text"></param>
-			/// <param name="pos"></param>
-			/// <returns></returns>
+			/// <param name="text">表示するテキスト</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>リンクが押されたときtrue,それ以外のときfalse</returns>
 			bool link(const String& text, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -3127,6 +3171,10 @@ namespace s3d
 			/// <summary>
 			/// スライダー
 			/// </summary>
+			/// <param name="value"></param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>値が変更されたときtrue,それ以外のときfalse</returns>
 			template<class T>
 			bool slider(T& value, const T min, const T max, const double width = 200, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
@@ -3159,6 +3207,13 @@ namespace s3d
 			/// <summary>
 			/// スピンボックス
 			/// </summary>
+			/// <param name="value">値を操作する変数</param>
+			/// <param name="min">最小値</param>
+			/// <param name="max">最大値</param>
+			/// <param name="width">横幅</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
+			/// <returns>値が変更されたときtrue,それ以外のときfalse</returns>
 			template<class T>
 			bool spinBox(T& value, const T& min, const T& max, const T& inc = 1, const double width = 200, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
@@ -3204,6 +3259,7 @@ namespace s3d
 			/// <summary>
 			/// 区切り線
 			/// </summary>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
 			void split(Optional<Vec2> pos = unspecified)
 			{
 				detail::Window& window = getCurrentWindow();
@@ -3215,6 +3271,13 @@ namespace s3d
 			/// <summary>
 			/// プログレスバー
 			/// </summary>
+			/// <param name="value">min以上,max以下の数値</param>
+			/// <param name="min">最小値</param>
+			/// <param name="max">最大値</param>
+			/// <param name="width">横幅</param>
+			/// <param name="color">バーの色</param>
+			/// <param name="enabled">アクティブ状態</param>
+			/// <param name="pos">ウィンドウ内の座標,unspecifiedで自動</param>
 			template<class T>
 			void progressBar(const T& value, const T& min, const T& max, double width = 200, Optional<ColorF> color = unspecified, const bool enabled = true, Optional<Vec2> pos = unspecified)
 			{
