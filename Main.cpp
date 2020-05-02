@@ -150,6 +150,39 @@ void Main()
 				}
 				gui.groupEnd(); gui.newLine();
 
+				//TreeNode
+				gui.groupBegin(U"TreeNode", true);
+				{
+					if (gui.treeNode(U"最初から展開しているノード", true))
+					{
+						gui.newLine();
+						gui.groupBegin();
+						{
+							gui.label(U"Hoge");
+						}
+						gui.groupEnd();
+					}
+					gui.newLine();
+					if (gui.treeNode(U"Node1"))
+					{
+						gui.newLine();
+						gui.groupBegin();
+						{
+							if (gui.treeNode(U"Node2"))
+							{
+								gui.newLine();
+								gui.groupBegin();
+								{
+									gui.label(U"Fuga");
+								}
+								gui.groupEnd();
+							}
+						}
+						gui.groupEnd();
+					}
+				}
+				gui.groupEnd(); gui.newLine();
+
 				//Image
 				gui.groupBegin(U"Image", true);
 				{

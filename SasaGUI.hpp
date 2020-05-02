@@ -251,6 +251,7 @@ namespace s3d
 			const Vec2 TextButtonPadding = Vec2(7, 4);
 			const Vec2 ImageButtonPadding = Vec2(4, 4);
 			const Vec2 TabItemPadding = Vec2(5, 0);
+			const Vec2 TreeNodePadding = Vec2(0, 0);
 
 			Vec2 CursorDeltaF()
 			{
@@ -2288,6 +2289,37 @@ namespace s3d
 					RectF(rect.pos, barWidth, rect.h).draw(enabled ? m_color : theme.accentDisableCol);
 				}
 			};
+
+			struct TreeNodeCtrl : detail::IControl
+			{
+				String m_text;
+				bool m_expand;
+				bool m_hovered;
+				bool m_clicked;
+				void update(GUIManager& mgr, detail::Window& wnd) override
+				{
+					const auto& group = wnd.groups[groupIdx];
+					m_hovered = mgr.windowItemHovered() && rect.mouseOver();
+					m_clicked = m_hovered && MouseL.down();
+					if (m_clicked)
+					{
+						m_expand = !m_expand;
+					}
+					if (m_hovered)
+					{
+						Cursor::RequestStyle(CursorStyle::Hand);
+					}
+				}
+				void draw(GUIManager& mgr, detail::Window& wnd) override
+				{
+					const auto& group = wnd.groups[groupIdx];
+					const auto& theme = mgr.getTheme();
+					const auto enabled = getEnabled(wnd);
+					const auto fontCol = enabled ? theme.fontCol : theme.buttonDisableFontCol;
+					detail::drawTriangle(rect.leftCenter() + Vec2(detail::TreeNodePadding.x + theme.font.height() / 2, 0), theme.font.height() / 4, m_expand ? 0_deg : 60_deg, fontCol);
+					theme.font(m_text).draw(rect.pos + detail::TreeNodePadding + Vec2(theme.font.height(), 0), fontCol);
+				}
+			};
 		public:
 			GUIManager()
 				:GUIManager(GUITheme::Light())
@@ -3290,7 +3322,31 @@ namespace s3d
 				ctrl->m_color = color ? *color : getTheme().accentCol;
 				ctrl->m_per = Clamp(static_cast<double>(value - min) / static_cast<double>(max - min), 0.0, 1.0);
 			}
-
+			/// <summary>
+			/// ツリーノード
+			/// </summary>
+			/// <param name="text">表示するテキスト</param>
+			/// <param name="expand">最初から展開するならtrue,展開しないならfalse</param>
+			/// <returns>展開しているならtrue,展開していないならfalse</returns>
+			bool treeNode(const String& text, bool expand = false, const bool enabled = true, Optional<Vec2> pos = unspecified)
+			{
+				detail::Window& window = getCurrentWindow();
+				ID id = getID(text);
+				std::shared_ptr<TreeNodeCtrl> ctrl = getControl<TreeNodeCtrl>(window, id);
+				if (!ctrl)
+				{
+					const auto& theme = getTheme();
+					ctrl = std::make_shared<TreeNodeCtrl>();
+					ctrl->rect.size = theme.font(text).region().size + detail::TreeNodePadding * 2;
+					ctrl->rect.w += theme.font.height();
+					ctrl->m_expand = expand;
+					addControl(window, ctrl, id);
+				}
+				ctrl->rect.pos = calcPos(window, pos, ctrl->rect.size);
+				ctrl->enabled = enabled;
+				ctrl->m_text = text;
+				return ctrl->m_expand;
+			}
 			void showDebugWindow()
 			{
 				windowBegin(U"Debug");
