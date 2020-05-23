@@ -612,19 +612,19 @@ namespace s3d
 					{
 						if (KeyX.down())
 						{
-							Cut();
+							cut();
 						}
 						if (KeyC.down())
 						{
-							Copy();
+							copy();
 						}
 						if (KeyV.down())
 						{
-							Paste();
+							paste();
 						}
 						if (KeyA.down())
 						{
-							SelectAll();
+							selectAll();
 						}
 					}
 				}
@@ -671,7 +671,7 @@ namespace s3d
 					}
 				}
 
-				void Cut()
+				void cut()
 				{
 					if (isSelecting())
 					{
@@ -680,7 +680,7 @@ namespace s3d
 					}
 				}
 
-				void Copy()
+				void copy()
 				{
 					if (isSelecting())
 					{
@@ -688,7 +688,7 @@ namespace s3d
 					}
 				}
 
-				void Paste()
+				void paste()
 				{
 					String text;
 					if (Clipboard::GetText(text))
@@ -697,7 +697,7 @@ namespace s3d
 					}
 				}
 
-				void SelectAll()
+				void selectAll()
 				{
 					m_isSelecting = true;
 					m_cursorIndex = m_text.length();
@@ -751,9 +751,6 @@ namespace s3d
 					//キーボード入力
 					if (m_isActive)
 					{
-						const size_t hoveringIdx = getHoveringIndex();
-						const size_t previousCursorIndex = m_cursorIndex;
-
 # if SIV3D_PLATFORM(MACOS)
 						const bool ctrlPressed = KeyCommand.pressed();
 # else
@@ -761,6 +758,9 @@ namespace s3d
 #endif
 
 						procCommandKey(ctrlPressed);
+
+						const size_t hoveringIdx = getHoveringIndex();
+						const size_t previousCursorIndex = m_cursorIndex;
 
 						Array<size_t> linesLength;//各行の長さ
 						Vector2D<size_t> cursorPos(0, m_cursorIndex);//カーソルの行,列
