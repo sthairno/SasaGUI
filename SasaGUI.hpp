@@ -789,7 +789,7 @@ namespace s3d
 						//カーソル移動
 						if (m_editingText.isEmpty())
 						{
-							if (detail::KeyRepeat(KeyLeft))
+							if (m_cursorIndex > 0 && detail::KeyRepeat(KeyLeft))
 							{
 								m_cursorIndex--;
 							}
