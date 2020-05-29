@@ -196,8 +196,6 @@ void Main()
 		}
 		gui.windowEnd();
 
-		gui.showDebugWindow();
-
 		gui.frameEnd();
 	}
 }
