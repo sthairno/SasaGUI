@@ -7,6 +7,8 @@ void Main()
 
 	SasaGUI::GUIManager gui;
 
+	constexpr SizeF windowSize(600, 500);
+
 	bool enabled = true;
 
 	bool checked = false;
@@ -29,7 +31,7 @@ void Main()
 			System::Exit();
 		}
 
-		gui.windowBegin(U"Preview");
+		gui.windowBegin(U"Preview", 0, windowSize, Scene::CenterF() - windowSize / 2);
 		{
 			gui.checkBox(enabled, U"Enabled");
 			gui.newLine();
