@@ -2060,6 +2060,7 @@ namespace s3d
 				Circle m_svCircle;
 				detail::ButtonBase m_hueGrip;
 				Circle m_hueCircle;
+				Line m_hueLine;
 				bool m_colorChanged = false;
 				ColorpickerCtrl(HSV& color) :m_color(color) {}
 				void drawLine(const Line& line, double tickness, const Array<ColorF>& colors)
@@ -2072,15 +2073,21 @@ namespace s3d
 						bg = ed;
 					}
 				}
+				void calcPosSize()
+				{
+					m_svRect.pos = m_rect.pos + Vec2(10, 10);
+					m_hueLine = Line(m_svRect.tr() + Vec2(20, 10), m_svRect.br() + Vec2(20, -10));
+					m_svCircle = Circle(m_svRect.pos + Vec2(m_color.s, 1 - m_color.v) * (m_svRect.size - Vec2(1, 1)), 10);
+					m_hueCircle = Circle(m_hueLine.begin.lerp(m_hueLine.end, m_color.h / 360.0), 10);
+				}
 				void update(GUIManager& mgr, detail::Window& wnd) override
 				{
 					const auto hovered = mgr.windowItemHovered();
 					const auto enabled = getEnabled(wnd);
 					const auto prevCol = m_color;
-					m_svRect.pos = m_rect.pos + Vec2(10, 10);
-					const Line hueLine(m_svRect.tr() + Vec2(20, 10), m_svRect.br() + Vec2(20, -10));
-					m_svCircle = Circle(m_svRect.pos + Vec2(m_color.s, 1 - m_color.v) * (m_svRect.size - Vec2(1, 1)), 10);
-					m_hueCircle = Circle(hueLine.begin.lerp(hueLine.end, m_color.h / 360.0), 10);
+
+					calcPosSize();
+
 					m_svGrip.update(hovered && m_svCircle.mouseOver(), MouseL.down(), MouseL.pressed(), enabled);
 					m_hueGrip.update(hovered && m_hueCircle.mouseOver(), MouseL.down(), MouseL.pressed(), enabled);
 					if (enabled)
@@ -2097,11 +2104,11 @@ namespace s3d
 						}
 						if (m_hueGrip.grab())
 						{
-							m_color.h = Clamp(m_color.h + detail::CursorDeltaF().y * 360.0 / hueLine.length(), 0.0, 360.0);
+							m_color.h = Clamp(m_color.h + detail::CursorDeltaF().y * 360.0 / m_hueLine.length(), 0.0, 360.0);
 						}
-						else if (hovered && !m_hueGrip.hover() && RectF(hueLine.begin - Vec2(10, 0), 20, hueLine.end.y + 1).leftClicked())
+						else if (hovered && !m_hueGrip.hover() && RectF(m_hueLine.begin - Vec2(10, 0), 20, m_hueLine.end.y + 1).leftClicked())
 						{
-							m_color.h = Clamp((Cursor::PosF().y - hueLine.begin.y) * 360.0 / (hueLine.end.y - hueLine.begin.y), 0.0, 360.0);
+							m_color.h = Clamp((Cursor::PosF().y - m_hueLine.begin.y) * 360.0 / (m_hueLine.end.y - m_hueLine.begin.y), 0.0, 360.0);
 						}
 					}
 					m_colorChanged = m_color != prevCol;
@@ -2109,7 +2116,8 @@ namespace s3d
 				void draw(GUIManager& mgr, detail::Window&) override
 				{
 					const auto& theme = mgr.getTheme();
-					const Line hueLine(m_svRect.tr() + Vec2(20, 10), m_svRect.br() + Vec2(20, -10));
+
+					calcPosSize();
 
 					m_svRect
 						.draw(Arg::left = ColorF(1), Arg::right = HSV(m_color.h, 1, 1, 1))
@@ -2118,10 +2126,10 @@ namespace s3d
 					m_svCircle.draw(m_svGrip.getBackColor(theme)).drawFrame(0, 1, m_svGrip.getFrameColor(theme));
 					Circle(m_svCircle.x, m_svCircle.y, m_svCircle.r - 4).draw(m_color);
 
-					hueLine
+					m_hueLine
 						.draw(LineStyle::RoundCap, 22, theme.buttonFrameCol)
 						.draw(LineStyle::RoundCap, 20, Palette::Red);
-					drawLine(hueLine, 20, { HSV(0),HSV(60),HSV(120),HSV(180),HSV(240),HSV(300),HSV(360) });
+					drawLine(m_hueLine, 20, { HSV(0),HSV(60),HSV(120),HSV(180),HSV(240),HSV(300),HSV(360) });
 					m_hueCircle.draw(m_hueGrip.getBackColor(theme)).drawFrame(0, 1, m_hueGrip.getFrameColor(theme));
 					Circle(m_hueCircle.x, m_hueCircle.y, m_hueCircle.r - 4).draw(HSV(m_color.h));
 				}
