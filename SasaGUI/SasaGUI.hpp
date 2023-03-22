@@ -103,6 +103,8 @@ namespace SasaGUI
 
 		bool button(StringView label);
 
+		TextEditState& simpleTextBox(StringView id, double width = 200, const Optional<size_t>& maxChars = unspecified);
+
 	private:
 		
 		std::unique_ptr<detail::GUIImpl> m_impl;

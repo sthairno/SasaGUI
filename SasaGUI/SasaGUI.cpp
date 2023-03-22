@@ -60,9 +60,10 @@ namespace SasaGUI
 			template<std::derived_from<IControl> ControlType>
 			inline ControlType& nextStatefulControl(size_t id)
 			{
+				s3d::detail::HashCombine(id, typeid(ControlType).hash_code());
 				return reinterpret_cast<ControlType&>(nextStatefulControlImpl(
-					CombineHash(id, typeid(ControlType).hash_code()),
-					[]() { return std::make_shared<ControlType>(); }
+					id,
+					[]() ->std::shared_ptr<IControl> { return std::make_shared<ControlType>(); }
 				));
 			}
 
@@ -138,11 +139,6 @@ namespace SasaGUI
 		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)];
 	}
 
-	static size_t CombineHash(size_t a, size_t b)
-	{
-		return a ^ b;
-	}
-
 	// WindowImpl
 
 	WindowImpl::WindowImpl(StringView id, StringView name)
@@ -212,16 +208,18 @@ namespace SasaGUI
 
 	IControl& WindowImpl::nextStatefulControlImpl(size_t id, ControlGenerator generator)
 	{
-		size_t hash = CombineHash(m_salt, id);
-		auto itr = m_savedControls.find(hash);
+		s3d::detail::HashCombine(id, m_salt);
+
+		auto itr = m_savedControls.find(id);
 		if (itr == m_savedControls.end())
 		{
 			auto [tmp, _] = m_savedControls.emplace(
-				hash,
+				id,
 				generator()
 			);
 			itr = tmp;
 		}
+
 		return nextControlImpl(itr->second);
 	}
 
@@ -471,5 +469,59 @@ namespace SasaGUI
 		auto& button = getCurrentWindowImpl()
 			.nextStatelessControl(std::make_shared<Button>(label));
 		return button.clicked();
+	}
+
+	// SimpleTextBox
+
+	class SimpleTextBox : public IControl
+	{
+	public:
+
+		SimpleTextBox()
+		{ }
+
+	public:
+
+		double width = 200;
+
+		Optional<size_t> maxChars = unspecified;
+
+		TextEditState& state()
+		{
+			return m_state;
+		}
+
+	private:
+
+		mutable TextEditState m_state;
+
+		Vec2 m_pos;
+
+		double m_renderWidth;
+
+		Size computeSize() const override
+		{
+			return SimpleGUI::TextBoxRegion(m_pos, width).size.asPoint();
+		}
+
+		void update(Rect rect) override
+		{
+			m_pos = rect.pos;
+			m_renderWidth = rect.w;
+		}
+
+		void draw() const
+		{
+			SimpleGUI::TextBox(m_state, m_pos, m_renderWidth, maxChars);
+		}
+	};
+
+	TextEditState& GUIManager::simpleTextBox(StringView id, double width, const Optional<size_t>& maxChars)
+	{
+		auto& textBox = getCurrentWindowImpl()
+			.nextStatefulControl<SimpleTextBox>(id.hash());
+		textBox.width = width;
+		textBox.maxChars = maxChars;
+		return textBox.state();
 	}
 }

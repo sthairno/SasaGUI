@@ -6,14 +6,25 @@ void Main()
 	Scene::SetBackground(ColorF{ 0.6, 0.8, 0.7 });
 
 	SasaGUI::GUIManager gui;
+	size_t counter = 0;
+	bool showTextBox = true;
 	
 	while (System::Update())
 	{
+		ClearPrint();
 		gui.frameBegin();
+
+		showTextBox ^= KeyControl.down();
 
 		if (gui.button(U"Click here"))
 		{
-			Print << U"Clicked!";
+			counter++;
+		}
+		Print << counter;
+
+		if (showTextBox)
+		{
+			Print << gui.simpleTextBox(U"test").text;
 		}
 
 		gui.windowBegin(U"test1");
