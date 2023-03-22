@@ -12,22 +12,15 @@ namespace SasaGUI
 		Foreground
 	};
 
-	StringView ToString(WindowLayer layer)
-	{
-		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)];
-	}
-
 	class IControl
 	{
 	public:
 
-		IControl() { }
+		virtual Size computeSize() const = 0;
 
-		virtual Size computeSize() const { return { }; };
+		virtual void update(Rect rect) = 0;
 
-		virtual void update(Rect rect) { };
-
-		virtual void draw() const { };
+		virtual void draw() const = 0;
 
 		virtual ~IControl() { };
 	};
@@ -37,6 +30,8 @@ namespace SasaGUI
 		class WindowImpl : Uncopyable
 		{
 		public:
+
+			using ControlGenerator = std::shared_ptr<IControl>(*)();
 
 			WindowImpl(StringView id, StringView name);
 
@@ -57,9 +52,18 @@ namespace SasaGUI
 			void frameEnd();
 
 			template<std::derived_from<IControl> ControlType>
-			inline ControlType& nextControl(std::unique_ptr<ControlType> control)
+			inline ControlType& nextStatelessControl(std::shared_ptr<ControlType> control)
 			{
-				return reinterpret_cast<ControlType&>(nextControlImpl(std::move(control)));
+				return reinterpret_cast<ControlType&>(nextControlImpl(control));
+			}
+
+			template<std::derived_from<IControl> ControlType>
+			inline ControlType& nextStatefulControl(size_t id)
+			{
+				return reinterpret_cast<ControlType&>(nextStatefulControlImpl(
+					CombineHash(id, typeid(ControlType).hash_code()),
+					[]() { return std::make_shared<ControlType>(); }
+				));
 			}
 
 			void draw() const;
@@ -68,9 +72,15 @@ namespace SasaGUI
 
 			String m_id;
 
-			Array<std::unique_ptr<IControl>> m_controls;
+			size_t m_salt;
 
-			IControl& nextControlImpl(std::unique_ptr<IControl> control);
+			Array<std::shared_ptr<IControl>> m_controls;
+
+			std::map<size_t, std::shared_ptr<IControl>> m_savedControls;
+
+			IControl& nextControlImpl(std::shared_ptr<IControl> control);
+
+			IControl& nextStatefulControlImpl(size_t id, ControlGenerator generator);
 		};
 	}
 
@@ -78,13 +88,13 @@ namespace SasaGUI
 	{
 	public:
 
+		using container_type = HashTable<String, std::unique_ptr<WindowImpl>>;
+
 		Layer(WindowLayer type)
 			: type(type)
 		{ }
 
 	public:
-
-		using container_type = HashTable<String, std::unique_ptr<WindowImpl>>;
 
 		const WindowLayer type;
 
@@ -123,6 +133,16 @@ namespace SasaGUI
 		};
 	}
 
+	static StringView ToString(WindowLayer layer)
+	{
+		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)];
+	}
+
+	static size_t CombineHash(size_t a, size_t b)
+	{
+		return a ^ b;
+	}
+
 	// WindowImpl
 
 	WindowImpl::WindowImpl(StringView id, StringView name)
@@ -132,6 +152,7 @@ namespace SasaGUI
 		})
 		, m_controls()
 		, m_id(id)
+		, m_salt(RandomUint64())
 	{ }
 
 	void WindowImpl::frameBegin()
@@ -173,22 +194,35 @@ namespace SasaGUI
 		}
 	}
 
-	IControl& WindowImpl::nextControlImpl(std::unique_ptr<IControl> c)
+	IControl& WindowImpl::nextControlImpl(std::shared_ptr<IControl> control)
 	{
-		m_controls.emplace_back(std::move(c));
+		m_controls.emplace_back(control);
 
-		auto& control = *m_controls.back();
-
-		Size size = control.computeSize();
+		Size size = control->computeSize();
 		Rect localRect{ nextPos, size };
 		Rect globalRect = localRect.movedBy(window.rect.pos);
 
-		control.update(globalRect);
+		control->update(globalRect);
 
 		nextPos.y += size.y;
 		nextPos.y += window.space;
 
-		return control;
+		return *control;
+	}
+
+	IControl& WindowImpl::nextStatefulControlImpl(size_t id, ControlGenerator generator)
+	{
+		size_t hash = CombineHash(m_salt, id);
+		auto itr = m_savedControls.find(hash);
+		if (itr == m_savedControls.end())
+		{
+			auto [tmp, _] = m_savedControls.emplace(
+				hash,
+				generator()
+			);
+			itr = tmp;
+		}
+		return nextControlImpl(itr->second);
 	}
 
 	// Layer
@@ -384,7 +418,7 @@ namespace SasaGUI
 	void GUIManager::dummy(Size size)
 	{
 		getCurrentWindowImpl()
-			.nextControl(std::make_unique<Dummy>(size));
+			.nextStatelessControl(std::make_shared<Dummy>(size));
 	}
 
 	// Button
@@ -435,7 +469,7 @@ namespace SasaGUI
 	bool GUIManager::button(StringView label)
 	{
 		auto& button = getCurrentWindowImpl()
-			.nextControl(std::make_unique<Button>(label));
+			.nextStatelessControl(std::make_shared<Button>(label));
 		return button.clicked();
 	}
 }
