@@ -2,6 +2,9 @@
 
 namespace SasaGUI
 {
+	using WindowImpl = detail::WindowImpl;
+	using GUIImpl = detail::GUIImpl;
+
 	enum class WindowLayer : int32
 	{
 		Background,
@@ -9,40 +12,70 @@ namespace SasaGUI
 		Foreground
 	};
 
-	class WindowImpl
+	class IControl
 	{
 	public:
 
-		WindowImpl(StringView id, StringView name);
+		IControl() { }
 
-	public:
+		virtual Size computeSize() const { return { }; };
 
-		Window window;
+		virtual void update(Rect rect) { };
 
-		bool defined = false;
+		virtual void draw() const { };
 
-		const String& id() const { return m_id; }
-
-		void draw() const;
-
-	private:
-
-		String m_id;
+		virtual ~IControl() { };
 	};
+
+	namespace detail
+	{
+		class WindowImpl : Uncopyable
+		{
+		public:
+
+			WindowImpl(StringView id, StringView name);
+
+		public:
+
+			Window window;
+
+			bool defined = false;
+
+			Point nextPos{ 0, 0 };
+
+			Size contentSize{ 0, 0 };
+
+			const String& id() const { return m_id; }
+
+			void frameBegin();
+
+			void frameEnd();
+
+			void nextControl(std::unique_ptr<IControl> control);
+
+			void draw() const;
+
+		private:
+
+			String m_id;
+
+			std::vector<std::unique_ptr<IControl>> m_controls;
+		};
+	}
 
 	class Layer
 	{
 	public:
 
-		using container_type = HashTable<String, WindowImpl>;
+		using container_type = HashTable<String, std::unique_ptr<WindowImpl>>;
 
 		const container_type& container() const { return m_container; }
-
-		WindowImpl& defineWindow(StringView id);
 
 		void frameBegin();
 
 		void frameEnd();
+
+		WindowImpl& defineWindow(StringView id);
 
 	private:
 
@@ -72,15 +105,94 @@ namespace SasaGUI
 			.displayName = String{ name },
 			.rect = { RandomPoint({0, 0, Scene::Size() - Size{100, 100}}), 100, 100 }
 		})
+		, m_controls()
 		, m_id(id)
 	{ }
 
-	void WindowImpl::draw() const
+	void WindowImpl::frameBegin()
+	{
+		defined = false;
+		nextPos = { 0, 0 };
+		contentSize = { 0, 0 };
+		m_controls.clear();
+	}
+
+	void WindowImpl::frameEnd()
 	{
 		
 	}
 
+	void WindowImpl::nextControl(std::unique_ptr<IControl> c)
+	{
+		m_controls.emplace_back(std::move(c));
+
+		auto& control = *m_controls.back();
+
+		Size size = control.computeSize();
+		Rect localRect{ nextPos, size };
+		Rect globalRect = localRect.movedBy(window.rect.pos);
+
+		control.update(globalRect);
+
+		nextPos.y += size.y;
+		nextPos.y += window.space;
+	}
+
+	void WindowImpl::draw() const
+	{
+		auto& font = SimpleGUI::GetFont();
+
+		if (not (window.flags & WindowFlag::NoBackground))
+		{
+			RoundRect{ window.rect, 10 }
+				.drawFrame(0, 1, Palette::Lightgray)
+				.draw(ColorF{ 0.9 });
+
+			if (not (window.flags & WindowFlag::NoTitlebar))
+			{
+				RectF{ window.rect.pos, window.rect.w, font.height() }
+					.rounded(10, 10, 0, 0)
+					.draw(Palette::Lightgray);
+				font(window.displayName)
+					.draw(Arg::topCenter = window.rect.topCenter(), Palette::Black);
+			}
+		}
+
+		for (auto& control : m_controls)
+		{
+			control->draw();
+		}
+	}
+
 	// Layer
+
+	void Layer::frameBegin()
+	{
+		for (auto& [id, impl] : m_container)
+		{
+			impl->frameBegin();
+		}
+	}
+
+	void Layer::frameEnd()
+	{
+		for (auto itr = m_container.begin(); itr != m_container.end();)
+		{
+			if (itr->second->defined)
+			{
+				itr++;
+			}
+			else
+			{
+				itr = m_container.erase(itr);
+			}
+		}
+
+		for (auto& [id, impl] : m_container)
+		{
+			impl->frameEnd();
+		}
+	}
 
 	WindowImpl& Layer::defineWindow(StringView id)
 	{
@@ -90,42 +202,19 @@ namespace SasaGUI
 		{
 			auto [tmp, _] = m_container.emplace(
 				id,
-				WindowImpl{ id, id }
+				std::make_unique<WindowImpl>( id, id )
 			);
 			itr = tmp;
 		}
 
-		auto& impl = itr->second;
+		auto& impl = *itr->second;
 		impl.defined = true;
-		return itr->second;
-	}
-
-	void Layer::frameBegin()
-	{
-		for (auto& [id, impl] : m_container)
-		{
-			impl.defined = false;
-		}
-	}
-
-	void Layer::frameEnd()
-	{
-		for (auto itr = m_container.begin(); itr != m_container.end();)
-		{
-			if (itr->second.defined)
-			{
-				itr++;
-			}
-			else
-			{
-				itr = m_container.erase(itr);
-			}
-		}
+		return impl;
 	}
 
 	// GUIImpl
 
-	Layer& detail::GUIImpl::getLayer(WindowLayer layer)
+	Layer& GUIImpl::getLayer(WindowLayer layer)
 	{
 		return m_layers[static_cast<int32>(layer)];
 	}
@@ -133,13 +222,12 @@ namespace SasaGUI
 	// GUIManager
 
 	GUIManager::GUIManager()
-		: m_impl(new detail::GUIImpl())
+		: m_impl(std::make_unique<GUIImpl>())
 	{
 		m_defaultWindow = &m_impl
 			->getLayer(WindowLayer::Background)
-			.defineWindow(U"DefaultWindow")
-			.window;
-		m_defaultWindow->flags =
+			.defineWindow(U"DefaultWindow");
+		m_defaultWindow->window.flags =
 			WindowFlag::NoTitlebar
 			| WindowFlag::NoResize
 			| WindowFlag::NoMove
@@ -160,16 +248,15 @@ namespace SasaGUI
 		m_stack.clear();
 		m_stack.push_back(m_defaultWindow);
 
-		for (auto layer : m_impl->layers())
+		for (auto& layer : m_impl->layers())
 		{
 			layer.frameBegin();
 		}
 
 		m_defaultWindow = &m_impl
 			->getLayer(WindowLayer::Background)
-			.defineWindow(U"DefaultWindow")
-			.window;
-		m_defaultWindow->rect = Scene::Rect();
+			.defineWindow(U"DefaultWindow");
+		m_defaultWindow->window.rect = Scene::Rect();
 	}
 
 	void GUIManager::frameEnd()
@@ -184,16 +271,16 @@ namespace SasaGUI
 			const HSV color{ ((double)idx / 4 * 360), 0.8, 1.0 };
 			for (auto& [id, impl] : layer.container())
 			{
-				auto& window = impl.window;
+				auto& window = impl->window;
 
-				impl.draw();
+				impl->draw();
 
 				window.rect.drawFrame(1, 0, color);
 				Line{ window.rect.tl(), window.rect.br() }.draw(color);
 				Line{ window.rect.bl(), window.rect.tr() }.draw(color);
 
-				SimpleGUI::GetFont()(window.displayName)
-					.draw(Arg::topCenter = window.rect.topCenter(), color);
+				SimpleGUI::GetFont()(U"{}:{}"_fmt(id, window.displayName))
+					.draw(Arg::bottomLeft = window.rect.tl(), color);
 			}
 		}
 	}
@@ -203,12 +290,11 @@ namespace SasaGUI
 		WindowLayer layer = flags & WindowFlag::AlwaysForeground
 			? WindowLayer::Foreground
 			: WindowLayer::Normal;
-		auto window = &m_impl
+		auto windowImpl = &m_impl
 			->getLayer(layer)
-			.defineWindow(name)
-			.window;
-		window->flags = flags;
-		m_stack.push_back(window);
+			.defineWindow(name);
+		windowImpl->window.flags = flags;
+		m_stack.push_back(windowImpl);
 	}
 
 	void GUIManager::windowEnd()
@@ -218,4 +304,42 @@ namespace SasaGUI
 
 	GUIManager::~GUIManager()
 	{ }
+
+	// Dummy
+
+	class Dummy : public IControl
+	{
+	public:
+
+		Dummy(Size size)
+			: m_size(size)
+		{ }
+
+	private:
+
+		Size m_size;
+
+		Rect m_rect;
+
+		Size computeSize() const override
+		{
+			return m_size;
+		}
+
+		void update(Rect rect) override
+		{
+			m_rect = rect;
+		}
+
+		void draw() const
+		{
+			m_rect.drawFrame(1, 0, Palette::Black);
+		}
+	};
+
+	void GUIManager::dummy(Size size)
+	{
+		getCurrentWindowImpl()
+			.nextControl(std::make_unique<Dummy>(size));
+	}
 }

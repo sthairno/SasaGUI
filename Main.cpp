@@ -11,11 +11,16 @@ void Main()
 	{
 		gui.frameBegin();
 
-		gui.windowBegin(U"test");
+		gui.windowBegin(U"test1");
+		gui.dummy({ 300, 200 });
+		gui.dummy({ 100, 50 });
 		gui.windowEnd();
 
-		gui.windowBegin(U"test2");
-		gui.windowEnd();
+		if (Periodic::Square0_1(1s) == 0.0)
+		{
+			gui.windowBegin(U"test2");
+			gui.windowEnd();
+		}
 
 		gui.frameEnd();
 	}

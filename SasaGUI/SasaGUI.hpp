@@ -4,6 +4,8 @@ namespace SasaGUI
 {
 	namespace detail
 	{
+		class WindowImpl;
+
 		class GUIImpl;
 	}
 
@@ -65,6 +67,8 @@ namespace SasaGUI
 		Rect rect;
 
 		WindowFlag flags;
+
+		int32 space = 5;
 	};
 
 	class GUIManager
@@ -89,17 +93,25 @@ namespace SasaGUI
 
 		void windowEnd();
 
-		const Window& getDefaultWindow() { return *m_defaultWindow; }
+		const Window& getDefaultWindow();
 
-		const Window& getCurrentWindow() { return *m_stack.back(); }
+		const Window& getCurrentWindow();
+
+		// Controls
+
+		void dummy(Size size);
 
 	private:
 		
 		std::unique_ptr<detail::GUIImpl> m_impl;
 
-		std::vector<Window*> m_stack;
+		std::vector<detail::WindowImpl*> m_stack;
 
-		Window* m_defaultWindow;
+		detail::WindowImpl* m_defaultWindow;
+
+		detail::WindowImpl& getDefaultWindowImpl() { return *m_defaultWindow; }
+
+		detail::WindowImpl& getCurrentWindowImpl() { return *m_stack.back(); }
 
 	public:
 
