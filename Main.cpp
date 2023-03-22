@@ -11,6 +11,11 @@ void Main()
 	{
 		gui.frameBegin();
 
+		if (gui.button(U"Click here"))
+		{
+			Print << U"Clicked!";
+		}
+
 		gui.windowBegin(U"test1");
 		gui.dummy({ 300, 200 });
 		gui.dummy({ 100, 50 });

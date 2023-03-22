@@ -101,6 +101,8 @@ namespace SasaGUI
 
 		void dummy(Size size);
 
+		bool button(StringView label);
+
 	private:
 		
 		std::unique_ptr<detail::GUIImpl> m_impl;

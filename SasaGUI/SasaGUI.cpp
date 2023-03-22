@@ -51,7 +51,11 @@ namespace SasaGUI
 
 			void frameEnd();
 
-			void nextControl(std::unique_ptr<IControl> control);
+			template<std::derived_from<IControl> ControlType>
+			inline ControlType& nextControl(std::unique_ptr<ControlType> control)
+			{
+				return reinterpret_cast<ControlType&>(nextControlImpl(std::move(control)));
+			}
 
 			void draw() const;
 
@@ -60,6 +64,8 @@ namespace SasaGUI
 			String m_id;
 
 			std::vector<std::unique_ptr<IControl>> m_controls;
+
+			IControl& nextControlImpl(std::unique_ptr<IControl> control);
 		};
 	}
 
@@ -122,22 +128,6 @@ namespace SasaGUI
 		
 	}
 
-	void WindowImpl::nextControl(std::unique_ptr<IControl> c)
-	{
-		m_controls.emplace_back(std::move(c));
-
-		auto& control = *m_controls.back();
-
-		Size size = control.computeSize();
-		Rect localRect{ nextPos, size };
-		Rect globalRect = localRect.movedBy(window.rect.pos);
-
-		control.update(globalRect);
-
-		nextPos.y += size.y;
-		nextPos.y += window.space;
-	}
-
 	void WindowImpl::draw() const
 	{
 		auto& font = SimpleGUI::GetFont();
@@ -162,6 +152,24 @@ namespace SasaGUI
 		{
 			control->draw();
 		}
+	}
+
+	IControl& WindowImpl::nextControlImpl(std::unique_ptr<IControl> c)
+	{
+		m_controls.emplace_back(std::move(c));
+
+		auto& control = *m_controls.back();
+
+		Size size = control.computeSize();
+		Rect localRect{ nextPos, size };
+		Rect globalRect = localRect.movedBy(window.rect.pos);
+
+		control.update(globalRect);
+
+		nextPos.y += size.y;
+		nextPos.y += window.space;
+
+		return control;
 	}
 
 	// Layer
@@ -341,5 +349,57 @@ namespace SasaGUI
 	{
 		getCurrentWindowImpl()
 			.nextControl(std::make_unique<Dummy>(size));
+	}
+
+	// Button
+
+	class Button : public IControl
+	{
+	public:
+
+		Button(StringView label)
+			: m_label(label)
+		{ }
+
+		bool clicked() const
+		{
+			return m_clicked;
+		}
+
+	private:
+
+		String m_label;
+
+		Vec2 m_pos;
+
+		double m_width;
+
+		bool m_clicked = false;
+
+		Size computeSize() const override
+		{
+			return SimpleGUI::ButtonRegion(m_label, { 0, 0 }).size.asPoint();
+		}
+
+		void update(Rect rect) override
+		{
+			m_pos = rect.pos;
+			m_width = rect.w;
+
+			m_clicked = rect.leftClicked();
+		}
+
+		void draw() const
+		{
+			[[maybe_unused]]
+			bool unused = SimpleGUI::Button(m_label, m_pos, m_width);
+		}
+	};
+
+	bool GUIManager::button(StringView label)
+	{
+		auto& button = getCurrentWindowImpl()
+			.nextControl(std::make_unique<Button>(label));
+		return button.clicked();
 	}
 }
