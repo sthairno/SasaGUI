@@ -5,6 +5,8 @@ namespace SasaGUI
 	using WindowImpl = detail::WindowImpl;
 	using GUIImpl = detail::GUIImpl;
 
+	class Layer;
+
 	enum class WindowLayer : int32
 	{
 		Background,
@@ -23,6 +25,22 @@ namespace SasaGUI
 		virtual void draw() const = 0;
 
 		virtual ~IControl() { };
+	};
+
+	class InputContext
+	{
+	public:
+
+		void requestCapture(detail::WindowImpl& window);
+
+	private:
+
+		friend Layer;
+		friend detail::GUIImpl;
+
+		Optional<size_t> m_capturedWindowId = none;
+
+		Vec2 m_cursorPos{ 0, 0 };
 	};
 
 	namespace detail
@@ -45,9 +63,13 @@ namespace SasaGUI
 
 			Size contentSize{ 0, 0 };
 
+			bool requestMoveToFront = false;
+
 			const String& id() const { return m_id; }
 
-			void frameBegin();
+			size_t randomId() const { return m_randomId; }
+
+			void frameBegin(InputContext& input);
 
 			void frameEnd();
 
@@ -73,7 +95,7 @@ namespace SasaGUI
 
 			String m_id;
 
-			size_t m_salt;
+			size_t m_randomId;
 
 			Array<std::shared_ptr<IControl>> m_controls;
 
@@ -101,9 +123,9 @@ namespace SasaGUI
 
 		const container_type& container() const { return m_container; }
 
-		void frameBegin();
+		void frameBegin(InputContext& input);
 
-		void frameEnd();
+		void frameEnd(InputContext& input);
 
 		WindowImpl& defineWindow(StringView id);
 
@@ -112,6 +134,10 @@ namespace SasaGUI
 		container_type m_container;
 
 		std::list<String> m_windowOrder;
+
+		container_type::iterator createWindow(StringView id, StringView name);
+
+		void deleteUnusedWindow(InputContext& input);
 	};
 
 	namespace detail
@@ -122,6 +148,10 @@ namespace SasaGUI
 
 			std::array<Layer, 3>& layers() { return m_layers; }
 
+			void frameBegin();
+
+			void frameEnd();
+
 			Layer& getLayer(WindowLayer layer);
 
 		private:
@@ -131,12 +161,21 @@ namespace SasaGUI
 				Layer{ WindowLayer::Normal },
 				Layer{ WindowLayer::Foreground }
 			};
+
+			InputContext m_input;
 		};
 	}
 
 	static StringView ToString(WindowLayer layer)
 	{
 		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)];
+	}
+
+	// InputContext
+
+	void InputContext::requestCapture(detail::WindowImpl& window)
+	{
+		m_capturedWindowId = window.randomId();
 	}
 
 	// WindowImpl
@@ -148,11 +187,13 @@ namespace SasaGUI
 		})
 		, m_controls()
 		, m_id(id)
-		, m_salt(RandomUint64())
+		, m_randomId(RandomUint64())
 	{ }
 
-	void WindowImpl::frameBegin()
+	void WindowImpl::frameBegin(InputContext& input)
 	{
+		input.requestCapture(*this);
+
 		defined = false;
 		nextPos = { 0, 0 };
 		contentSize = { 0, 0 };
@@ -208,7 +249,7 @@ namespace SasaGUI
 
 	IControl& WindowImpl::nextStatefulControlImpl(size_t id, ControlGenerator generator)
 	{
-		s3d::detail::HashCombine(id, m_salt);
+		s3d::detail::HashCombine(id, m_randomId);
 
 		auto itr = m_savedControls.find(id);
 		if (itr == m_savedControls.end())
@@ -225,30 +266,32 @@ namespace SasaGUI
 
 	// Layer
 
-	void Layer::frameBegin()
+	void Layer::frameBegin(InputContext& input)
 	{
-		for (auto& id : m_windowOrder)
+		std::list<String> front;
+		for (auto itr = m_windowOrder.rbegin(); itr != m_windowOrder.rend();)
 		{
-			m_container.at(id)->frameBegin();
+			auto& window = *m_container.at(*itr);
+
+			window.frameBegin(input);
+
+			if (window.requestMoveToFront)
+			{
+				front.emplace_back(std::move(*itr));
+				m_windowOrder.erase(--(itr.base()));
+				window.requestMoveToFront = false;
+			}
+			else
+			{
+				itr++;
+			}
 		}
+		m_windowOrder.merge(std::move(front));
 	}
 
-	void Layer::frameEnd()
+	void Layer::frameEnd(InputContext& input)
 	{
-		m_windowOrder.remove_if([this](const String& id) {
-			auto itr = m_container.find(id);
-
-			if (itr->second->defined)
-			{
-				return false;
-			}
-
-			m_container.erase(itr);
-
-
-			Console << U"[" << ToString(type) << U"][-] " << id;
-			return true;
-		});
+		deleteUnusedWindow(input);
 
 		for (auto& [id, impl] : m_container)
 		{
@@ -262,14 +305,7 @@ namespace SasaGUI
 
 		if (itr == m_container.end())
 		{
-			auto [tmp, _] = m_container.emplace(
-				id,
-				std::make_unique<WindowImpl>( id, id )
-			);
-			m_windowOrder.emplace_back(String{ id });
-			itr = tmp;
-
-			Console << U"[" << ToString(type) << U"][+] " << itr->first;
+			itr = createWindow(id, id);
 		}
 
 		auto& impl = *itr->second;
@@ -277,7 +313,58 @@ namespace SasaGUI
 		return impl;
 	}
 
+	Layer::container_type::iterator Layer::createWindow(StringView id, StringView name)
+	{
+		auto [itr, _] = m_container.emplace(
+				id,
+				std::make_unique<WindowImpl>(id, name)
+		);
+		m_windowOrder.emplace_back(String{ id });
+
+		Console << U"[" << ToString(type) << U"][+] " << itr->first;
+
+		return itr;
+	}
+
+	void Layer::deleteUnusedWindow(InputContext& input)
+	{
+		m_windowOrder.remove_if([&, this](const String& id) {
+			auto itr = m_container.find(id);
+
+			if (itr->second->defined)
+			{
+				return false;
+			}
+
+			if (input.m_capturedWindowId == itr->second->randomId())
+			{
+				input.m_capturedWindowId = none;
+			}
+
+			m_container.erase(itr);
+
+			Console << U"[" << ToString(type) << U"][-] " << id;
+			return true;
+		});
+	}
+
 	// GUIImpl
+
+	void GUIImpl::frameBegin()
+	{
+		for (auto layerItr = m_layers.rbegin(); layerItr != m_layers.rend(); layerItr++)
+		{
+			layerItr->frameBegin(m_input);
+		}
+	}
+
+	void GUIImpl::frameEnd()
+	{
+		for (auto& layer : m_layers)
+		{
+			layer.frameEnd(m_input);
+		}
+	}
 
 	Layer& GUIImpl::getLayer(WindowLayer layer)
 	{
@@ -313,11 +400,7 @@ namespace SasaGUI
 		m_stack.clear();
 		m_stack.push_back(m_defaultWindow);
 
-		auto& layers = m_impl->layers();
-		for (auto layerItr = layers.rbegin(); layerItr != layers.rend(); layerItr++)
-		{
-			layerItr->frameBegin();
-		}
+		m_impl->frameBegin();
 
 		m_defaultWindow = &m_impl
 			->getLayer(WindowLayer::Background)
@@ -327,10 +410,7 @@ namespace SasaGUI
 
 	void GUIManager::frameEnd()
 	{
-		for (auto& layer : m_impl->layers())
-		{
-			layer.frameEnd();
-		}
+		m_impl->frameEnd();
 
 		for (auto [idx, layer] : Indexed(m_impl->layers()))
 		{
