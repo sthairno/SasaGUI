@@ -12,6 +12,11 @@ namespace SasaGUI
 		Foreground
 	};
 
+	StringView ToString(WindowLayer layer)
+	{
+		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)];
+	}
+
 	class IControl
 	{
 	public:
@@ -63,7 +68,7 @@ namespace SasaGUI
 
 			String m_id;
 
-			std::vector<std::unique_ptr<IControl>> m_controls;
+			Array<std::unique_ptr<IControl>> m_controls;
 
 			IControl& nextControlImpl(std::unique_ptr<IControl> control);
 		};
@@ -73,7 +78,15 @@ namespace SasaGUI
 	{
 	public:
 
+		Layer(WindowLayer type)
+			: type(type)
+		{ }
+
+	public:
+
 		using container_type = HashTable<String, std::unique_ptr<WindowImpl>>;
+
+		const WindowLayer type;
 
 		const container_type& container() const { return m_container; }
 
@@ -86,6 +99,8 @@ namespace SasaGUI
 	private:
 
 		container_type m_container;
+
+		std::list<String> m_windowOrder;
 	};
 
 	namespace detail
@@ -100,7 +115,11 @@ namespace SasaGUI
 
 		private:
 
-			std::array<Layer, 3> m_layers;
+			std::array<Layer, 3> m_layers{
+				Layer{ WindowLayer::Background },
+				Layer{ WindowLayer::Normal },
+				Layer{ WindowLayer::Foreground }
+			};
 		};
 	}
 
@@ -176,25 +195,28 @@ namespace SasaGUI
 
 	void Layer::frameBegin()
 	{
-		for (auto& [id, impl] : m_container)
+		for (auto& id : m_windowOrder)
 		{
-			impl->frameBegin();
+			m_container.at(id)->frameBegin();
 		}
 	}
 
 	void Layer::frameEnd()
 	{
-		for (auto itr = m_container.begin(); itr != m_container.end();)
-		{
+		m_windowOrder.remove_if([this](const String& id) {
+			auto itr = m_container.find(id);
+
 			if (itr->second->defined)
 			{
-				itr++;
+				return false;
 			}
-			else
-			{
-				itr = m_container.erase(itr);
-			}
-		}
+
+			m_container.erase(itr);
+
+
+			Console << U"[" << ToString(type) << U"][-] " << id;
+			return true;
+		});
 
 		for (auto& [id, impl] : m_container)
 		{
@@ -212,7 +234,10 @@ namespace SasaGUI
 				id,
 				std::make_unique<WindowImpl>( id, id )
 			);
+			m_windowOrder.emplace_back(String{ id });
 			itr = tmp;
+
+			Console << U"[" << ToString(type) << U"][+] " << itr->first;
 		}
 
 		auto& impl = *itr->second;
@@ -256,9 +281,10 @@ namespace SasaGUI
 		m_stack.clear();
 		m_stack.push_back(m_defaultWindow);
 
-		for (auto& layer : m_impl->layers())
+		auto& layers = m_impl->layers();
+		for (auto layerItr = layers.rbegin(); layerItr != layers.rend(); layerItr++)
 		{
-			layer.frameBegin();
+			layerItr->frameBegin();
 		}
 
 		m_defaultWindow = &m_impl
