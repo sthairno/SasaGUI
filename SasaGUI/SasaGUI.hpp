@@ -93,9 +93,9 @@ namespace SasaGUI
 
 		void windowEnd();
 
-		const Window& getDefaultWindow();
+		const Window& getDefaultWindow() const;
 
-		const Window& getCurrentWindow();
+		const Window& getCurrentWindow() const;
 
 		// Controls
 

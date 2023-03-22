@@ -336,6 +336,16 @@ namespace SasaGUI
 		m_stack.pop_back();
 	}
 
+	const Window& GUIManager::getDefaultWindow() const
+	{
+		return m_defaultWindow->window;
+	}
+
+	const Window& GUIManager::getCurrentWindow() const
+	{
+		return m_stack.back()->window;
+	}
+
 	GUIManager::~GUIManager()
 	{ }
 
