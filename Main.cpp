@@ -8,7 +8,7 @@ void Main()
 	SasaGUI::GUIManager gui;
 	size_t counter = 0;
 	bool showTextBox = true;
-	
+
 	while (System::Update())
 	{
 		ClearPrint();
@@ -32,11 +32,11 @@ void Main()
 		gui.dummy({ 100, 50 });
 		gui.windowEnd();
 
-		if (Periodic::Square0_1(1s) == 0.0)
-		{
-			gui.windowBegin(U"test2");
-			gui.windowEnd();
-		}
+		gui.windowBegin(U"test2");
+		gui.windowEnd();
+
+		gui.windowBegin(U"test3");
+		gui.windowEnd();
 
 		gui.frameEnd();
 	}

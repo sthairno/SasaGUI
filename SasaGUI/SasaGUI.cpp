@@ -6,6 +6,7 @@ namespace SasaGUI
 	using GUIImpl = detail::GUIImpl;
 
 	class Layer;
+	class InputContext;
 
 	enum class WindowLayer : int32
 	{
@@ -20,7 +21,7 @@ namespace SasaGUI
 
 		virtual Size computeSize() const = 0;
 
-		virtual void update(Rect rect) = 0;
+		virtual void update(Rect rect, Optional<Vec2> cursorPos) = 0;
 
 		virtual void draw() const = 0;
 
@@ -31,16 +32,31 @@ namespace SasaGUI
 	{
 	public:
 
-		void requestCapture(detail::WindowImpl& window);
+		bool requestCapture();
+
+		bool requestCapture(WindowImpl& window, bool capture = true);
+
+		Optional<Vec2> getCursorPos();
+
+		Optional<Vec2> getCursorPos(WindowImpl& window);
 
 	private:
 
 		friend Layer;
-		friend detail::GUIImpl;
+		friend GUIImpl;
+
+		bool m_captured = false;
 
 		Optional<size_t> m_capturedWindowId = none;
 
 		Vec2 m_cursorPos{ 0, 0 };
+
+		void frameBegin();
+	};
+
+	enum class WindowState
+	{
+		Default, Moving, Resizing
 	};
 
 	namespace detail
@@ -51,7 +67,7 @@ namespace SasaGUI
 
 			using ControlGenerator = std::shared_ptr<IControl>(*)();
 
-			WindowImpl(StringView id, StringView name);
+			WindowImpl(InputContext& input, StringView id, StringView name);
 
 		public:
 
@@ -97,6 +113,12 @@ namespace SasaGUI
 
 			size_t m_randomId;
 
+			InputContext* m_input;
+
+			WindowState m_state = WindowState::Default;
+
+			bool m_mouseOver = false;
+
 			Array<std::shared_ptr<IControl>> m_controls;
 
 			std::map<size_t, std::shared_ptr<IControl>> m_savedControls;
@@ -125,7 +147,7 @@ namespace SasaGUI
 
 		void frameBegin(InputContext& input);
 
-		void frameEnd(InputContext& input);
+		void frameEnd();
 
 		WindowImpl& defineWindow(StringView id);
 
@@ -135,9 +157,11 @@ namespace SasaGUI
 
 		std::list<String> m_windowOrder;
 
+		InputContext* m_input;
+
 		container_type::iterator createWindow(StringView id, StringView name);
 
-		void deleteUnusedWindow(InputContext& input);
+		void deleteUnusedWindow();
 	};
 
 	namespace detail
@@ -173,26 +197,145 @@ namespace SasaGUI
 
 	// InputContext
 
-	void InputContext::requestCapture(detail::WindowImpl& window)
+	bool InputContext::requestCapture()
 	{
-		m_capturedWindowId = window.randomId();
+		if (not m_captured)
+		{
+			m_captured = true;
+			return true;
+		}
+		return false;
+	}
+
+	bool InputContext::requestCapture(WindowImpl& window, bool capture)
+	{
+		if (m_capturedWindowId == window.randomId() ||
+			not m_captured)
+		{
+			if (capture)
+			{
+				m_capturedWindowId = window.randomId();
+			}
+			else
+			{
+				m_capturedWindowId = none;
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	Optional<Vec2> InputContext::getCursorPos()
+	{
+		if (not m_captured)
+		{
+			return m_cursorPos;
+		}
+
+		return none;
+	}
+
+	Optional<Vec2> InputContext::getCursorPos(WindowImpl& window)
+	{
+		if (m_capturedWindowId == window.randomId())
+		{
+			return m_cursorPos;
+		}
+
+		if (not m_captured)
+		{
+			return m_cursorPos;
+		}
+
+		return none;
+	}
+
+	void InputContext::frameBegin()
+	{
+		m_cursorPos = Cursor::PosF();
+		if (not m_capturedWindowId.has_value())
+		{
+			m_captured = false;
+		}
 	}
 
 	// WindowImpl
 
-	WindowImpl::WindowImpl(StringView id, StringView name)
+	WindowImpl::WindowImpl(InputContext& input, StringView id, StringView name)
 		: window({
 			.displayName = String{ name },
 			.rect = { RandomPoint({0, 0, Scene::Size() - Size{100, 100}}), 100, 100 }
 		})
 		, m_controls()
+		, m_input(&input)
 		, m_id(id)
 		, m_randomId(RandomUint64())
 	{ }
 
 	void WindowImpl::frameBegin(InputContext& input)
 	{
-		input.requestCapture(*this);
+		auto& font = SimpleGUI::GetFont();
+		m_input = &input;
+
+		Rect titlebarRect;
+		Rect contentRect;
+
+		if (window.flags & WindowFlag::NoBackground)
+		{
+			titlebarRect = { 0, 0, 0, 0 };
+			contentRect = { 0, 0, 0, 0 };
+		}
+		else
+		{
+			if (window.flags & WindowFlag::NoTitlebar)
+			{
+				titlebarRect = { 0, 0, 0, 0 };
+				contentRect = window.rect;
+			}
+			else
+			{
+				titlebarRect = {
+					window.rect.pos,
+					window.rect.w,
+					font.height()
+				};
+				contentRect = {
+					window.rect.x,
+					window.rect.y + font.height(),
+					window.rect.w,
+					window.rect.h - font.height()
+				};
+			}
+		}
+
+		if (auto cursor = input.getCursorPos(*this))
+		{
+			if (m_state == WindowState::Default)
+			{
+				if (titlebarRect.contains(*cursor) &&
+					MouseL.down() &&
+					input.requestCapture(*this))
+				{
+					m_state = WindowState::Moving;
+					requestMoveToFront = true;
+				}
+			}
+			else if (m_state == WindowState::Moving)
+			{
+				if (MouseL.pressed())
+				{
+					window.rect.pos += Cursor::Delta();
+				}
+				else
+				{
+					m_state = WindowState::Default;
+					input.requestCapture(*this, false);
+				}
+			}
+			else if (m_state == WindowState::Resizing)
+			{ }
+		}
 
 		defined = false;
 		nextPos = { 0, 0 };
@@ -202,7 +345,7 @@ namespace SasaGUI
 
 	void WindowImpl::frameEnd()
 	{
-		
+		draw();
 	}
 
 	void WindowImpl::draw() const
@@ -239,7 +382,7 @@ namespace SasaGUI
 		Rect localRect{ nextPos, size };
 		Rect globalRect = localRect.movedBy(window.rect.pos);
 
-		control->update(globalRect);
+		control->update(globalRect, m_input->getCursorPos(*this));
 
 		nextPos.y += size.y;
 		nextPos.y += window.space;
@@ -268,12 +411,14 @@ namespace SasaGUI
 
 	void Layer::frameBegin(InputContext& input)
 	{
+		m_input = &input;
+
 		std::list<String> front;
 		for (auto itr = m_windowOrder.rbegin(); itr != m_windowOrder.rend();)
 		{
 			auto& window = *m_container.at(*itr);
 
-			window.frameBegin(input);
+			window.frameBegin(*m_input);
 
 			if (window.requestMoveToFront)
 			{
@@ -286,16 +431,15 @@ namespace SasaGUI
 				itr++;
 			}
 		}
-		m_windowOrder.merge(std::move(front));
+		m_windowOrder.splice(m_windowOrder.end(), std::move(front));
 	}
 
-	void Layer::frameEnd(InputContext& input)
+	void Layer::frameEnd()
 	{
-		deleteUnusedWindow(input);
-
-		for (auto& [id, impl] : m_container)
+		for (auto& id : m_windowOrder)
 		{
-			impl->frameEnd();
+			auto& window = *m_container.at(id);
+			window.frameEnd();
 		}
 	}
 
@@ -317,7 +461,7 @@ namespace SasaGUI
 	{
 		auto [itr, _] = m_container.emplace(
 				id,
-				std::make_unique<WindowImpl>(id, name)
+				std::make_unique<WindowImpl>(*m_input, id, name)
 		);
 		m_windowOrder.emplace_back(String{ id });
 
@@ -326,7 +470,7 @@ namespace SasaGUI
 		return itr;
 	}
 
-	void Layer::deleteUnusedWindow(InputContext& input)
+	void Layer::deleteUnusedWindow()
 	{
 		m_windowOrder.remove_if([&, this](const String& id) {
 			auto itr = m_container.find(id);
@@ -336,9 +480,9 @@ namespace SasaGUI
 				return false;
 			}
 
-			if (input.m_capturedWindowId == itr->second->randomId())
+			if (m_input->m_capturedWindowId == itr->second->randomId())
 			{
-				input.m_capturedWindowId = none;
+				m_input->m_capturedWindowId = none;
 			}
 
 			m_container.erase(itr);
@@ -352,6 +496,7 @@ namespace SasaGUI
 
 	void GUIImpl::frameBegin()
 	{
+		m_input.frameBegin();
 		for (auto layerItr = m_layers.rbegin(); layerItr != m_layers.rend(); layerItr++)
 		{
 			layerItr->frameBegin(m_input);
@@ -362,7 +507,7 @@ namespace SasaGUI
 	{
 		for (auto& layer : m_layers)
 		{
-			layer.frameEnd(m_input);
+			layer.frameEnd();
 		}
 	}
 
@@ -418,8 +563,6 @@ namespace SasaGUI
 			for (auto& [id, impl] : layer.container())
 			{
 				auto& window = impl->window;
-
-				impl->draw();
 
 				window.rect.drawFrame(1, 0, color);
 				Line{ window.rect.tl(), window.rect.br() }.draw(color);
@@ -482,7 +625,7 @@ namespace SasaGUI
 			return m_size;
 		}
 
-		void update(Rect rect) override
+		void update(Rect rect, Optional<Vec2>) override
 		{
 			m_rect = rect;
 		}
@@ -529,12 +672,13 @@ namespace SasaGUI
 			return SimpleGUI::ButtonRegion(m_label, { 0, 0 }).size.asPoint();
 		}
 
-		void update(Rect rect) override
+		void update(Rect rect, Optional<Vec2> cursorPos) override
 		{
 			m_pos = rect.pos;
 			m_width = rect.w;
 
-			m_clicked = rect.leftClicked();
+			bool mouseOver = cursorPos && rect.contains(*cursorPos);
+			m_clicked = mouseOver && MouseL.down();
 		}
 
 		void draw() const
@@ -584,7 +728,7 @@ namespace SasaGUI
 			return SimpleGUI::TextBoxRegion(m_pos, width).size.asPoint();
 		}
 
-		void update(Rect rect) override
+		void update(Rect rect, Optional<Vec2> cursorPos) override
 		{
 			m_pos = rect.pos;
 			m_renderWidth = rect.w;
