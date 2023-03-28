@@ -66,7 +66,7 @@ namespace SasaGUI
 
 			bool defined = false;
 
-			Point nextPos{ 0, 0 };
+			Point nextPos{ window.padding, window.padding };
 
 			bool requestMoveToFront = false;
 
@@ -354,7 +354,7 @@ namespace SasaGUI
 		updateRect(newRect);
 
 		defined = false;
-		nextPos = { 0, 0 };
+		nextPos = { window.padding, window.padding };
 		m_contentSize = { 0, 0 };
 		m_controls.clear();
 	}
@@ -362,6 +362,10 @@ namespace SasaGUI
 	void WindowImpl::frameEnd()
 	{
 		Rect newRect = rect();
+		if (not m_controls.empty())
+		{
+			m_contentSize += Size{ window.padding, window.padding };
+		}
 		if (window.flags & WindowFlag::AutoResize ||
 			m_firstFrame)
 		{
