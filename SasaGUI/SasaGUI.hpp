@@ -73,6 +73,19 @@ namespace SasaGUI
 		int32 space = 5;
 	};
 
+	class IControl
+	{
+	public:
+
+		virtual Size computeSize() const = 0;
+
+		virtual void update(Rect rect, Optional<Vec2> cursorPos) = 0;
+
+		virtual void draw() const = 0;
+
+		virtual ~IControl() { };
+	};
+
 	class GUIManager
 	{
 	public:
@@ -106,6 +119,8 @@ namespace SasaGUI
 		bool button(StringView label);
 
 		TextEditState& simpleTextBox(StringView id, double width = 200, const Optional<size_t>& maxChars = unspecified);
+
+		void custom(std::shared_ptr<IControl> control);
 
 	private:
 		

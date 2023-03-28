@@ -15,19 +15,6 @@ namespace SasaGUI
 		Foreground
 	};
 
-	class IControl
-	{
-	public:
-
-		virtual Size computeSize() const = 0;
-
-		virtual void update(Rect rect, Optional<Vec2> cursorPos) = 0;
-
-		virtual void draw() const = 0;
-
-		virtual ~IControl() { };
-	};
-
 	class InputContext
 	{
 	public:
@@ -844,5 +831,12 @@ namespace SasaGUI
 		textBox.width = width;
 		textBox.maxChars = maxChars;
 		return textBox.state();
+	}
+
+	// Custom
+
+	void GUIManager::custom(std::shared_ptr<IControl> control)
+	{
+		getCurrentWindowImpl().nextStatelessControl(control);
 	}
 }
