@@ -32,9 +32,11 @@ namespace SasaGUI
 	{
 	public:
 
-		bool requestCapture();
+		size_t hoveredItemId() const { return m_hoveredItemId; }
 
-		bool requestCapture(WindowImpl& window, bool capture = true);
+		bool hover(WindowImpl& window);
+
+		bool capture(WindowImpl& window, bool capture = true);
 
 		Optional<Vec2> getCursorPos();
 
@@ -45,11 +47,13 @@ namespace SasaGUI
 		friend Layer;
 		friend GUIImpl;
 
+		size_t m_hoveredItemId = 0;
+
 		bool m_captured = false;
 
-		Optional<size_t> m_capturedWindowId = none;
-
 		Vec2 m_cursorPos{ 0, 0 };
+
+		void reset();
 
 		void frameBegin();
 	};
@@ -192,33 +196,40 @@ namespace SasaGUI
 
 	static StringView ToString(WindowLayer layer)
 	{
-		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)];
+		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)] ;
 	}
 
 	// InputContext
 
-	bool InputContext::requestCapture()
+	bool InputContext::hover(WindowImpl& window)
 	{
-		if (not m_captured)
+		if (m_hoveredItemId == 0)
 		{
-			m_captured = true;
+			m_hoveredItemId = window.randomId();
 			return true;
 		}
+
+		if (m_hoveredItemId == window.randomId())
+		{
+			return true;
+		}
+
 		return false;
 	}
 
-	bool InputContext::requestCapture(WindowImpl& window, bool capture)
+	bool InputContext::capture(WindowImpl& window, bool capture)
 	{
-		if (m_capturedWindowId == window.randomId() ||
-			not m_captured)
+		if (m_hoveredItemId == 0 ||
+			m_hoveredItemId == window.randomId())
 		{
+			m_captured = capture;
 			if (capture)
 			{
-				m_capturedWindowId = window.randomId();
+				m_hoveredItemId = window.randomId();
 			}
 			else
 			{
-				m_capturedWindowId = none;
+				m_hoveredItemId = 0;
 			}
 			return true;
 		}
@@ -228,7 +239,7 @@ namespace SasaGUI
 
 	Optional<Vec2> InputContext::getCursorPos()
 	{
-		if (not m_captured)
+		if (m_hoveredItemId == 0)
 		{
 			return m_cursorPos;
 		}
@@ -238,12 +249,8 @@ namespace SasaGUI
 
 	Optional<Vec2> InputContext::getCursorPos(WindowImpl& window)
 	{
-		if (m_capturedWindowId == window.randomId())
-		{
-			return m_cursorPos;
-		}
-
-		if (not m_captured)
+		if (m_hoveredItemId == 0 ||
+			m_hoveredItemId == window.randomId())
 		{
 			return m_cursorPos;
 		}
@@ -251,12 +258,18 @@ namespace SasaGUI
 		return none;
 	}
 
+	void InputContext::reset()
+	{
+		m_hoveredItemId = 0;
+		m_captured = false;
+	}
+
 	void InputContext::frameBegin()
 	{
 		m_cursorPos = Cursor::PosF();
-		if (not m_capturedWindowId.has_value())
+		if (not m_captured)
 		{
-			m_captured = false;
+			m_hoveredItemId = 0;
 		}
 	}
 
@@ -281,48 +294,52 @@ namespace SasaGUI
 		Rect titlebarRect;
 		Rect contentRect;
 
-		if (window.flags & WindowFlag::NoBackground)
+		if (window.flags & WindowFlag::NoBackground ||
+			window.flags & WindowFlag::NoTitlebar)
 		{
 			titlebarRect = { 0, 0, 0, 0 };
-			contentRect = { 0, 0, 0, 0 };
+			contentRect = window.rect;
 		}
 		else
 		{
-			if (window.flags & WindowFlag::NoTitlebar)
-			{
-				titlebarRect = { 0, 0, 0, 0 };
-				contentRect = window.rect;
-			}
-			else
-			{
-				titlebarRect = {
-					window.rect.pos,
-					window.rect.w,
-					font.height()
-				};
-				contentRect = {
-					window.rect.x,
-					window.rect.y + font.height(),
-					window.rect.w,
-					window.rect.h - font.height()
-				};
-			}
+			titlebarRect = {
+				window.rect.pos,
+				window.rect.w,
+				font.height()
+			};
+			contentRect = {
+				window.rect.x,
+				window.rect.y + font.height(),
+				window.rect.w,
+				window.rect.h - font.height()
+			};
 		}
 
 		if (auto cursor = input.getCursorPos(*this))
 		{
-			if (m_state == WindowState::Default)
+			switch (m_state)
 			{
-				if (titlebarRect.contains(*cursor) &&
-					MouseL.down() &&
-					input.requestCapture(*this))
+			case SasaGUI::WindowState::Default:
+				if (titlebarRect.contains(*cursor))
 				{
-					m_state = WindowState::Moving;
-					requestMoveToFront = true;
+					input.hover(*this);
+					if (MouseL.down())
+					{
+						m_state = WindowState::Moving;
+						requestMoveToFront = true;
+						input.capture(*this);
+					}
 				}
-			}
-			else if (m_state == WindowState::Moving)
-			{
+				if (contentRect.contains(*cursor))
+				{
+					input.hover(*this);
+					if (MouseL.down())
+					{
+						requestMoveToFront = true;
+					}
+				}
+				break;
+			case SasaGUI::WindowState::Moving:
 				if (MouseL.pressed())
 				{
 					window.rect.pos += Cursor::Delta();
@@ -330,11 +347,12 @@ namespace SasaGUI
 				else
 				{
 					m_state = WindowState::Default;
-					input.requestCapture(*this, false);
+					input.capture(*this, false);
 				}
+				break;
+			case SasaGUI::WindowState::Resizing:
+				break;
 			}
-			else if (m_state == WindowState::Resizing)
-			{ }
 		}
 
 		defined = false;
@@ -382,7 +400,12 @@ namespace SasaGUI
 		Rect localRect{ nextPos, size };
 		Rect globalRect = localRect.movedBy(window.rect.pos);
 
-		control->update(globalRect, m_input->getCursorPos(*this));
+		Optional<Vec2> cursorPos = m_input->getCursorPos(*this);
+		if (m_state != WindowState::Default)
+		{
+			cursorPos.reset();
+		}
+		control->update(globalRect, cursorPos);
 
 		nextPos.y += size.y;
 		nextPos.y += window.space;
@@ -480,9 +503,9 @@ namespace SasaGUI
 				return false;
 			}
 
-			if (m_input->m_capturedWindowId == itr->second->randomId())
+			if (m_input->hoveredItemId() == itr->second->randomId())
 			{
-				m_input->m_capturedWindowId = none;
+				m_input->reset();
 			}
 
 			m_container.erase(itr);
@@ -509,6 +532,7 @@ namespace SasaGUI
 		{
 			layer.frameEnd();
 		}
+		Print << m_input.m_hoveredItemId << (m_input.m_captured ? U"🔒" : U"");
 	}
 
 	Layer& GUIImpl::getLayer(WindowLayer layer)
@@ -661,9 +685,9 @@ namespace SasaGUI
 
 		String m_label;
 
-		Vec2 m_pos;
+		Rect m_rect;
 
-		double m_width;
+		bool m_mouseOver = false;
 
 		bool m_clicked = false;
 
@@ -674,17 +698,20 @@ namespace SasaGUI
 
 		void update(Rect rect, Optional<Vec2> cursorPos) override
 		{
-			m_pos = rect.pos;
-			m_width = rect.w;
+			m_rect = rect;
 
-			bool mouseOver = cursorPos && rect.contains(*cursorPos);
-			m_clicked = mouseOver && MouseL.down();
+			m_mouseOver = cursorPos && rect.contains(*cursorPos);
+			m_clicked = m_mouseOver && MouseL.down();
 		}
 
 		void draw() const
 		{
+			Mat3x2 cursorMat = m_mouseOver
+				? Mat3x2::Translate(Cursor::PosF())
+				: Mat3x2::Translate(Cursor::PosF() + Vec2{ 1, 1 });
+			const Transformer2D _{ Mat3x2::Translate(m_rect.pos), cursorMat, Transformer2D::Target::PushLocal };
 			[[maybe_unused]]
-			bool unused = SimpleGUI::Button(m_label, m_pos, m_width);
+			bool unused = SimpleGUI::Button(m_label, { 0, 0 }, m_rect.w);
 		}
 	};
 
