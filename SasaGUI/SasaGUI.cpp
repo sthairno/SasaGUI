@@ -89,6 +89,8 @@ namespace SasaGUI
 
 			size_t randomId() const { return m_randomId; }
 
+			const Rect& rect() const { return window.rect; }
+
 			void frameBegin(InputContext& input);
 
 			void frameEnd();
@@ -123,6 +125,10 @@ namespace SasaGUI
 
 			bool m_mouseOver = false;
 
+			Optional<Rect> m_titlebarRect;
+
+			Optional<Rect> m_contentRect;
+
 			Array<std::shared_ptr<IControl>> m_controls;
 
 			std::map<size_t, std::shared_ptr<IControl>> m_savedControls;
@@ -130,6 +136,10 @@ namespace SasaGUI
 			IControl& nextControlImpl(std::shared_ptr<IControl> control);
 
 			IControl& nextStatefulControlImpl(size_t id, ControlGenerator generator);
+
+			void updateRect();
+
+			void updateRect(Rect rect);
 		};
 	}
 
@@ -278,49 +288,28 @@ namespace SasaGUI
 	WindowImpl::WindowImpl(InputContext& input, StringView id, StringView name)
 		: window({
 			.displayName = String{ name },
-			.rect = { RandomPoint({0, 0, Scene::Size() - Size{100, 100}}), 100, 100 }
+			.rect = { 0, 0, 100, 100 }
 		})
 		, m_controls()
 		, m_input(&input)
 		, m_id(id)
 		, m_randomId(RandomUint64())
-	{ }
+	{
+		updateRect();
+	}
 
 	void WindowImpl::frameBegin(InputContext& input)
 	{
 		auto& font = SimpleGUI::GetFont();
 		m_input = &input;
 
-		Rect titlebarRect;
-		Rect contentRect;
-
-		if (window.flags & WindowFlag::NoBackground ||
-			window.flags & WindowFlag::NoTitlebar)
-		{
-			titlebarRect = { 0, 0, 0, 0 };
-			contentRect = window.rect;
-		}
-		else
-		{
-			titlebarRect = {
-				window.rect.pos,
-				window.rect.w,
-				font.height()
-			};
-			contentRect = {
-				window.rect.x,
-				window.rect.y + font.height(),
-				window.rect.w,
-				window.rect.h - font.height()
-			};
-		}
-
+		Rect newRect = rect();
 		if (auto cursor = input.getCursorPos(*this))
 		{
 			switch (m_state)
 			{
 			case SasaGUI::WindowState::Default:
-				if (titlebarRect.contains(*cursor))
+				if (m_titlebarRect->contains(*cursor))
 				{
 					input.hover(*this);
 					if (MouseL.down())
@@ -330,7 +319,7 @@ namespace SasaGUI
 						input.capture(*this);
 					}
 				}
-				if (contentRect.contains(*cursor))
+				if (m_contentRect->contains(*cursor))
 				{
 					input.hover(*this);
 					if (MouseL.down())
@@ -342,7 +331,7 @@ namespace SasaGUI
 			case SasaGUI::WindowState::Moving:
 				if (MouseL.pressed())
 				{
-					window.rect.pos += Cursor::Delta();
+					newRect.pos += Cursor::Delta();
 				}
 				else
 				{
@@ -354,6 +343,7 @@ namespace SasaGUI
 				break;
 			}
 		}
+		updateRect(newRect);
 
 		defined = false;
 		nextPos = { 0, 0 };
@@ -363,6 +353,7 @@ namespace SasaGUI
 
 	void WindowImpl::frameEnd()
 	{
+		updateRect();
 		draw();
 	}
 
@@ -386,9 +377,12 @@ namespace SasaGUI
 			}
 		}
 
-		for (auto& control : m_controls)
 		{
-			control->draw();
+			ScopedViewport2D _{ *m_contentRect };
+			for (auto& control : m_controls)
+			{
+				control->draw();
+			}
 		}
 	}
 
@@ -400,12 +394,17 @@ namespace SasaGUI
 		Rect localRect{ nextPos, size };
 		Rect globalRect = localRect.movedBy(window.rect.pos);
 
-		Optional<Vec2> cursorPos = m_input->getCursorPos(*this);
-		if (m_state != WindowState::Default)
+		Optional<Vec2> localCursorPos;
+		if (auto globalCursorPos = m_input->getCursorPos(*this))
 		{
-			cursorPos.reset();
+			if (m_state == WindowState::Default &&
+				m_contentRect.has_value() &&
+				m_contentRect->contains(*globalCursorPos))
+			{
+				localCursorPos = globalCursorPos->movedBy(-m_contentRect->pos);
+			}
 		}
-		control->update(globalRect, cursorPos);
+		control->update(localRect, localCursorPos);
 
 		nextPos.y += size.y;
 		nextPos.y += window.space;
@@ -428,6 +427,38 @@ namespace SasaGUI
 		}
 
 		return nextControlImpl(itr->second);
+	}
+
+	void WindowImpl::updateRect()
+	{
+		auto& font = SimpleGUI::GetFont();
+
+		if (window.flags & WindowFlag::NoBackground ||
+			window.flags & WindowFlag::NoTitlebar)
+		{
+			m_titlebarRect = { 0, 0, 0, 0 };
+			m_contentRect = window.rect;
+		}
+		else
+		{
+			m_titlebarRect = {
+				window.rect.pos,
+				window.rect.w,
+				font.height()
+			};
+			m_contentRect = {
+				window.rect.x,
+				window.rect.y + font.height(),
+				window.rect.w,
+				window.rect.h - font.height()
+			};
+		}
+	}
+
+	void WindowImpl::updateRect(Rect rect)
+	{
+		window.rect = rect;
+		updateRect();
 	}
 
 	// Layer
