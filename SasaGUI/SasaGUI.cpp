@@ -81,15 +81,33 @@ namespace SasaGUI
 
 			Point nextPos{ 0, 0 };
 
-			Size contentSize{ 0, 0 };
-
 			bool requestMoveToFront = false;
+
+			Font font = SimpleGUI::GetFont();
 
 			const String& id() const { return m_id; }
 
 			size_t randomId() const { return m_randomId; }
 
 			const Rect& rect() const { return window.rect; }
+
+			int32 titlebarHeight() const { return font.height(); }
+
+			Size minSize() const
+			{
+				if (window.flags & WindowFlag::NoBackground)
+				{
+					return { 0, 0 };
+				}
+				else if (window.flags & WindowFlag::NoTitlebar)
+				{
+					return { 20, 20 };
+				}
+				else
+				{
+					return { 20,  Max(20, titlebarHeight()) };
+				}
+			}
 
 			void frameBegin(InputContext& input);
 
@@ -125,9 +143,13 @@ namespace SasaGUI
 
 			bool m_mouseOver = false;
 
+			bool m_firstFrame = true;
+
 			Optional<Rect> m_titlebarRect;
 
 			Optional<Rect> m_contentRect;
+
+			Size m_contentSize{ 0, 0 };
 
 			Array<std::shared_ptr<IControl>> m_controls;
 
@@ -300,7 +322,6 @@ namespace SasaGUI
 
 	void WindowImpl::frameBegin(InputContext& input)
 	{
-		auto& font = SimpleGUI::GetFont();
 		m_input = &input;
 
 		Rect newRect = rect();
@@ -347,20 +368,36 @@ namespace SasaGUI
 
 		defined = false;
 		nextPos = { 0, 0 };
-		contentSize = { 0, 0 };
+		m_contentSize = { 0, 0 };
 		m_controls.clear();
 	}
 
 	void WindowImpl::frameEnd()
 	{
-		updateRect();
+		Rect newRect = rect();
+		if (window.flags & WindowFlag::AutoResize ||
+			m_firstFrame)
+		{
+			newRect.size = { 0, 0 };
+			if (not (window.flags & WindowFlag::NoBackground) &&
+				not (window.flags & WindowFlag::NoTitlebar))
+			{
+				newRect.h += titlebarHeight();
+			}
+			newRect.size += m_contentSize;
+
+			Size min = minSize();
+			newRect.w = Max(newRect.w, min.x);
+			newRect.h = Max(newRect.h, min.y);
+		}
+		updateRect(newRect);
 		draw();
+
+		m_firstFrame = false;
 	}
 
 	void WindowImpl::draw() const
 	{
-		auto& font = SimpleGUI::GetFont();
-
 		if (not (window.flags & WindowFlag::NoBackground))
 		{
 			RoundRect{ window.rect, 10 }
@@ -369,8 +406,8 @@ namespace SasaGUI
 
 			if (not (window.flags & WindowFlag::NoTitlebar))
 			{
-				RectF{ window.rect.pos, window.rect.w, font.height() }
-					.rounded(10, 10, 0, 0)
+				m_titlebarRect
+					->rounded(10, 10, 0, 0)
 					.draw(Palette::Lightgray);
 				font(window.displayName)
 					.draw(Arg::topCenter = window.rect.topCenter(), Palette::Black);
@@ -406,6 +443,10 @@ namespace SasaGUI
 		}
 		control->update(localRect, localCursorPos);
 
+		Point br = localRect.br() + Point{ 1, 1 };
+		m_contentSize.x = Max(m_contentSize.x, br.x);
+		m_contentSize.y = Max(m_contentSize.y, br.y);
+
 		nextPos.y += size.y;
 		nextPos.y += window.space;
 
@@ -431,8 +472,6 @@ namespace SasaGUI
 
 	void WindowImpl::updateRect()
 	{
-		auto& font = SimpleGUI::GetFont();
-
 		if (window.flags & WindowFlag::NoBackground ||
 			window.flags & WindowFlag::NoTitlebar)
 		{
@@ -444,13 +483,13 @@ namespace SasaGUI
 			m_titlebarRect = {
 				window.rect.pos,
 				window.rect.w,
-				font.height()
+				titlebarHeight()
 			};
 			m_contentRect = {
 				window.rect.x,
-				window.rect.y + font.height(),
+				window.rect.y + titlebarHeight(),
 				window.rect.w,
-				window.rect.h - font.height()
+				window.rect.h - titlebarHeight()
 			};
 		}
 	}

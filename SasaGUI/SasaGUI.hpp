@@ -68,6 +68,8 @@ namespace SasaGUI
 
 		WindowFlag flags;
 
+		Size maxSize{ std::numeric_limits<Size::value_type>::max(), std::numeric_limits<Size::value_type>::max() };
+
 		int32 space = 5;
 	};
 

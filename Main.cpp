@@ -28,14 +28,14 @@ void Main()
 		}
 
 		gui.windowBegin(U"test1");
-		gui.dummy({ 300, 200 });
-		gui.dummy({ 100, 50 });
+		if (gui.button(U"Click here"))
+		{
+			counter++;
+		}
 		gui.windowEnd();
 
 		gui.windowBegin(U"test2");
-		gui.windowEnd();
-
-		gui.windowBegin(U"test3");
+		gui.dummy({ 200, 180 });
 		gui.windowEnd();
 
 		gui.frameEnd();
