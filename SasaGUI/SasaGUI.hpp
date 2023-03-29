@@ -73,6 +73,16 @@ namespace SasaGUI
 		int32 space = 5;
 
 		int32 padding = 10;
+
+		bool defined = false;
+
+		Rect lineRect{ padding, padding, 0, 0 };
+
+		bool requestMoveToFront = false;
+
+		Font font = SimpleGUI::GetFont();
+
+		bool sameLine = false;
 	};
 
 	class IControl
@@ -115,6 +125,8 @@ namespace SasaGUI
 		const Window& getCurrentWindow() const;
 
 		// Controls
+
+		void sameLine();
 
 		void dummy(Size size);
 

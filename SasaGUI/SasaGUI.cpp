@@ -64,21 +64,13 @@ namespace SasaGUI
 
 			Window window;
 
-			bool defined = false;
-
-			Point nextPos{ window.padding, window.padding };
-
-			bool requestMoveToFront = false;
-
-			Font font = SimpleGUI::GetFont();
-
 			const String& id() const { return m_id; }
 
 			size_t randomId() const { return m_randomId; }
 
 			const Rect& rect() const { return window.rect; }
 
-			int32 titlebarHeight() const { return font.height(); }
+			int32 titlebarHeight() const { return window.font.height(); }
 
 			Size minSize() const
 			{
@@ -323,7 +315,7 @@ namespace SasaGUI
 					if (MouseL.down())
 					{
 						m_state = WindowState::Moving;
-						requestMoveToFront = true;
+						window.requestMoveToFront = true;
 						input.capture(*this);
 					}
 				}
@@ -332,7 +324,7 @@ namespace SasaGUI
 					input.hover(*this);
 					if (MouseL.down())
 					{
-						requestMoveToFront = true;
+						window.requestMoveToFront = true;
 					}
 				}
 				break;
@@ -353,10 +345,11 @@ namespace SasaGUI
 		}
 		updateRect(newRect);
 
-		defined = false;
-		nextPos = { window.padding, window.padding };
+		window.defined = false;
+		window.lineRect = { window.padding, window.padding, 0, 0 };
 		m_contentSize = { 0, 0 };
 		m_controls.clear();
+		window.sameLine = false;
 	}
 
 	void WindowImpl::frameEnd()
@@ -400,7 +393,7 @@ namespace SasaGUI
 				m_titlebarRect
 					->rounded(10, 10, 0, 0)
 					.draw(Palette::Lightgray);
-				font(window.displayName)
+				window.font(window.displayName)
 					.draw(Arg::topCenter = window.rect.topCenter(), Palette::Black);
 			}
 		}
@@ -418,9 +411,33 @@ namespace SasaGUI
 	{
 		m_controls.emplace_back(control);
 
-		Size size = control->computeSize();
-		Rect localRect{ nextPos, size };
-		Rect globalRect = localRect.movedBy(window.rect.pos);
+		Rect localRect{ 0, 0, control->computeSize() };
+		if (window.sameLine)
+		{
+			localRect.pos = window.lineRect.tr();
+			localRect.x += window.space;
+		}
+		else
+		{
+			Point newLinePos = window.lineRect.bl();
+			if (window.lineRect.area() > 0.0)
+			{
+				newLinePos.y += window.space;
+			}
+
+			localRect.pos = newLinePos;
+
+			window.lineRect = { newLinePos, 0, 0 };
+		}
+		window.sameLine = false;
+
+		{
+			Point br = localRect.br();
+			m_contentSize.x = Max(m_contentSize.x, br.x);
+			m_contentSize.y = Max(m_contentSize.y, br.y);
+			window.lineRect.w = Max(window.lineRect.w, br.x - window.lineRect.x);
+			window.lineRect.h = Max(window.lineRect.h, br.y - window.lineRect.y);
+		}
 
 		Optional<Vec2> localCursorPos;
 		if (auto globalCursorPos = m_input->getCursorPos(*this))
@@ -433,13 +450,6 @@ namespace SasaGUI
 			}
 		}
 		control->update(localRect, localCursorPos);
-
-		Point br = localRect.br() + Point{ 1, 1 };
-		m_contentSize.x = Max(m_contentSize.x, br.x);
-		m_contentSize.y = Max(m_contentSize.y, br.y);
-
-		nextPos.y += size.y;
-		nextPos.y += window.space;
 
 		return *control;
 	}
@@ -500,15 +510,15 @@ namespace SasaGUI
 		std::list<String> front;
 		for (auto itr = m_windowOrder.rbegin(); itr != m_windowOrder.rend();)
 		{
-			auto& window = *m_container.at(*itr);
+			auto& impl = *m_container.at(*itr);
 
-			window.frameBegin(*m_input);
+			impl.frameBegin(*m_input);
 
-			if (window.requestMoveToFront)
+			if (impl.window.requestMoveToFront)
 			{
 				front.emplace_back(std::move(*itr));
 				m_windowOrder.erase(--(itr.base()));
-				window.requestMoveToFront = false;
+				impl.window.requestMoveToFront = false;
 			}
 			else
 			{
@@ -537,7 +547,7 @@ namespace SasaGUI
 		}
 
 		auto& impl = *itr->second;
-		impl.defined = true;
+		impl.window.defined = true;
 		return impl;
 	}
 
@@ -559,7 +569,7 @@ namespace SasaGUI
 		m_windowOrder.remove_if([&, this](const String& id) {
 			auto itr = m_container.find(id);
 
-			if (itr->second->defined)
+			if (itr->second->window.defined)
 			{
 				return false;
 			}
@@ -684,6 +694,11 @@ namespace SasaGUI
 	const Window& GUIManager::getCurrentWindow() const
 	{
 		return m_stack.back()->window;
+	}
+
+	void GUIManager::sameLine()
+	{
+		getCurrentWindowImpl().window.sameLine = true;
 	}
 
 	GUIManager::~GUIManager()

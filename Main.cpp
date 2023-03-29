@@ -35,7 +35,8 @@ void Main()
 		gui.windowEnd();
 
 		gui.windowBegin(U"test2");
-		gui.dummy({ 200, 180 });
+		gui.dummy({ 60, 80 }); gui.sameLine(); gui.dummy({ 100, 100 });
+		gui.dummy({ 100, 100 });
 		gui.windowEnd();
 
 		gui.frameEnd();
