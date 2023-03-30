@@ -21,6 +21,16 @@ namespace SasaGUI
 			constexpr static double CircleScale = 0.8;
 			constexpr static double InnerCircleScale = 0.6;
 		};
+
+		struct Tab
+		{
+			constexpr static int32 FrameThickness = 1;
+			constexpr static int32 TabR = 5;
+			constexpr static int32 TabSpace = 1;
+			constexpr static ColorF FrameColor = Palette::Black;
+			constexpr static ColorF TabColor = ColorF{ 0.8 };
+			constexpr static ColorF SelectedTabColor = ColorF::Zero();
+		};
 	}
 
 	using WindowImpl = detail::WindowImpl;
@@ -77,7 +87,7 @@ namespace SasaGUI
 		{
 		public:
 
-			using ControlGenerator = std::shared_ptr<IControl>(*)();
+			using ControlGenerator = std::function<std::shared_ptr<IControl>()>;
 
 			WindowImpl(InputContext& input, StringView id, StringView name);
 
@@ -127,6 +137,13 @@ namespace SasaGUI
 					id,
 					[]() ->std::shared_ptr<IControl> { return std::make_shared<ControlType>(); }
 				));
+			}
+
+			template<std::derived_from<IControl> ControlType>
+			inline ControlType& nextStatefulControl(size_t id, ControlGenerator generator)
+			{
+				s3d::detail::HashCombine(id, typeid(ControlType).hash_code());
+				return reinterpret_cast<ControlType&>(nextStatefulControlImpl(id, generator));
 			}
 
 			void draw() const;
@@ -1128,6 +1145,154 @@ namespace SasaGUI
 		auto& radioButton = getCurrentWindowImpl()
 			.nextStatelessControl(std::make_shared<RadioButton>(selected, label));
 		return radioButton.clicked();
+	}
+
+	// Tab
+
+	class Tab : public IControl
+	{
+	public:
+
+		using Config = Config::Tab;
+
+		Tab(const Array<String>& tabNames, size_t firstIdx)
+			: m_tabs(Arg::reserve = tabNames.size())
+			, selectedIdx(firstIdx)
+		{
+			assert(tabNames);
+
+			int32 tabHeight = 0;
+			Point tabPos = { Config::FrameThickness, Config::FrameThickness };
+			auto& font = SimpleGUI::GetFont();
+			for (auto& name : tabNames)
+			{
+				auto& tab = m_tabs.emplace_back(TabItem{
+					.label = font(name)
+				});
+
+				Size labelSize = tab.label.region().size.asPoint();
+				tab.localRect.pos = tabPos;
+				tab.localRect.w = labelSize.x + Config::TabR * 2;
+
+				tabPos.x += tab.localRect.w
+					+ Config::FrameThickness
+					+ Config::TabSpace
+					+ Config::FrameThickness;
+
+				tabHeight = Max(tabHeight, labelSize.y);
+			}
+			for (auto& tab : m_tabs)
+			{
+				tab.localRect.h = tabHeight;
+			}
+		}
+
+		size_t selectedIdx = 0;
+
+	private:
+
+		struct TabItem
+		{
+			Rect localRect;
+
+			DrawableText label;
+
+			Rect globalRect;
+
+			bool mouseOver = false;
+		};
+
+		Array<TabItem> m_tabs;
+
+		Size computeSize() const override
+		{
+			return m_tabs.back().localRect.br() + Size{ Config::FrameThickness, Config::FrameThickness };
+		}
+
+		void update(Rect rect, Optional<Vec2> cursorPos) override
+		{
+			for (auto [idx, tab] : IndexedRef(m_tabs))
+			{
+				tab.globalRect = tab.localRect.movedBy(rect.pos);
+				tab.mouseOver = cursorPos && tab.globalRect.contains(*cursorPos);
+
+				if (tab.mouseOver && MouseL.down())
+				{
+					selectedIdx = idx;
+				}
+			}
+		}
+
+		void draw() const override
+		{
+			for (auto [idx, tab] : IndexedRef(m_tabs))
+			{
+				bool selected = idx == selectedIdx;
+
+				if (selected)
+				{
+					tab.globalRect
+						.stretched(0, 0, Config::FrameThickness, 0)
+						.rounded(Config::TabR, Config::TabR, 0, 0)
+						.draw(Config::SelectedTabColor);
+				}
+				else
+				{
+					tab.globalRect
+						.rounded(Config::TabR, Config::TabR, 0, 0)
+						.draw(Config::TabColor);
+				}
+
+				LineString frame;
+				{
+					Polygon p = tab.globalRect
+						.stretched(Config::FrameThickness * 0.5, Config::FrameThickness * 0.5, 0, Config::FrameThickness * 0.5)
+						.rounded(Config::TabR + Config::FrameThickness * 0.5, Config::TabR + Config::FrameThickness * 0.5, 0, 0);
+					auto& outer = p.outer();
+					frame.reserve(outer.size());
+					frame.push_back(outer.back());
+					frame.insert(frame.cend(), outer.begin(), outer.end() - 1);
+				}
+				frame.draw(LineStyle::Uncapped, Config::FrameThickness, Config::FrameColor);
+
+				tab.label.drawAt(tab.globalRect.center(), Palette::Black);
+			}
+
+			if (selectedIdx < m_tabs.size())
+			{
+				auto& firstTab = m_tabs.front();
+				auto& selectedTab = m_tabs[selectedIdx];
+				auto& lastTab = m_tabs.back();
+				Rect{ firstTab.globalRect.leftX() - Config::FrameThickness, firstTab.globalRect.bottomY(), selectedTab.localRect.leftX(), Config::FrameThickness}
+					.draw(Config::FrameColor);
+				Rect{ selectedTab.globalRect.br(), lastTab.localRect.rightX() - selectedTab.localRect.rightX() + Config::FrameThickness, Config::FrameThickness }
+					.draw(Config::FrameColor);
+			}
+			else
+			{
+				auto& firstTab = m_tabs.front();
+				auto& lastTab = m_tabs.back();
+				Rect{
+					firstTab.globalRect.leftX() - Config::FrameThickness,
+					firstTab.globalRect.bottomY(),
+					lastTab.localRect.rightX() + Config::FrameThickness,
+					Config::FrameThickness
+				}.draw(Config::FrameColor);
+			}
+		}
+	};
+
+	size_t& GUIManager::tab(StringView id, Array<String> tabNames, size_t firstIdx)
+	{
+		assert(tabNames);
+		auto& tab = getCurrentWindowImpl()
+			.nextStatefulControl<Tab>(
+				id.hash(),
+				[&]() -> std::shared_ptr<IControl> {
+					return std::make_shared<Tab>(tabNames, firstIdx);
+				}
+			);
+		return tab.selectedIdx;
 	}
 
 	// Custom

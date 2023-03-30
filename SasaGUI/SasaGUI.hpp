@@ -155,7 +155,7 @@ namespace SasaGUI
 			return clicked;
 		}
 
-		void tab();
+		size_t& tab(StringView id, Array<String> tabNames, size_t firstIdx = 0);
 
 		void dropdown();
 

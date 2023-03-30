@@ -39,6 +39,15 @@ void Main()
 		gui.radiobutton(score, 0, U"0"); gui.sameLine();
 		gui.radiobutton(score, 1, U"1"); gui.sameLine();
 		gui.radiobutton(score, 2, U"2");
+		gui.label(U"Tab:");
+		{
+			switch (gui.tab(U"TabDemo", { U"Tab 1", U"Tab 2", U"Tab 3" }))
+			{
+			case 0: gui.label(U"Hoge (0)"); break;
+			case 1: gui.label(U"Fuga (1)"); break;
+			case 2: gui.label(U"FooBar (2)"); break;
+			}
+		}
 		gui.windowEnd();
 
 		gui.windowBegin(U"test2");
