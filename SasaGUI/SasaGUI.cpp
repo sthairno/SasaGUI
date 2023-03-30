@@ -2,6 +2,21 @@
 
 namespace SasaGUI
 {
+	namespace Config
+	{
+		struct CheckBox
+		{
+			constexpr static double BoxScale = 0.8;
+			constexpr static std::array<Vec2, 3> CheckLine{
+				Vec2{-0.5,-0.14},
+				Vec2{-0.21,0.44},
+				Vec2{0.64,-0.64}
+			};
+			constexpr static double CheckLineScale = 0.6;
+			constexpr static double CheckLineTickness = 0.28;
+		};
+	}
+
 	using WindowImpl = detail::WindowImpl;
 	using GUIImpl = detail::GUIImpl;
 
@@ -947,6 +962,94 @@ namespace SasaGUI
 	{
 		getCurrentWindowImpl()
 			.nextStatelessControl(std::make_shared<Image>(texture, diffuse));
+	}
+
+	// CheckBox
+
+	class CheckBox : public IControl
+	{
+	public:
+
+		using Config = Config::CheckBox;
+
+		CheckBox(bool& value, StringView label)
+			: m_ref(&value)
+			, m_labelText(SimpleGUI::GetFont()(label))
+		{ }
+
+		bool valueChanged() const { return m_valueChanged; }
+
+	private:
+
+		bool* m_ref;
+
+		DrawableText m_labelText;
+
+		bool m_value = false;
+
+		bool m_valueChanged = false;
+
+		RectF m_checkRect;
+
+		Vec2 m_labelLeftCenter;
+
+		Size computeSize() const override
+		{
+			Size labelSize = m_labelText.region().size.asPoint();
+			return { labelSize.x + checkboxSize(), labelSize.y };
+		}
+
+		void update(Rect rect, Optional<Vec2> cursorPos) override
+		{
+			m_checkRect = RectF{ Arg::leftCenter = rect.leftCenter(), static_cast<RectF::size_type::value_type>(checkboxSize()) };
+			m_labelLeftCenter = m_checkRect.rightCenter();
+
+			if (cursorPos &&
+				rect.contains(*cursorPos))
+			{
+				Cursor::RequestStyle(CursorStyle::Hand);
+				m_valueChanged = MouseL.down();
+				*m_ref ^= m_valueChanged;
+			}
+
+			m_value = *m_ref;
+			m_ref = nullptr;
+		}
+
+		void draw() const override
+		{
+			m_checkRect.drawFrame(1, Palette::Black);
+			if (m_value)
+			{
+				Vec2 center = m_checkRect.center();
+				int32 size = checkboxSize();
+				drawCheckLine(m_checkRect.center(), checkboxSize() * Config::CheckLineScale);
+			}
+			m_labelText
+				.draw(Arg::leftCenter = m_labelLeftCenter, Palette::Black);
+		}
+
+		int32 checkboxSize() const
+		{
+			return static_cast<int32>(m_labelText.font.height() * Config::BoxScale);
+		}
+
+		void drawCheckLine(Vec2 center, double scale) const
+		{
+			LineString line(Arg::reserve = Config::CheckLine.size());
+			for (Vec2 p : Config::CheckLine)
+			{
+				line.push_back(center + p * scale);
+			}
+			line.draw(LineStyle::Uncapped, Config::CheckLineTickness * scale, Palette::Black);
+		}
+	};
+
+	bool GUIManager::checkbox(bool& checked, StringView label)
+	{
+		auto& checkbox = getCurrentWindowImpl()
+			.nextStatelessControl(std::make_shared<CheckBox>(checked, label));
+		return checkbox.valueChanged();
 	}
 
 	// Custom

@@ -140,7 +140,7 @@ namespace SasaGUI
 
 		void image(TextureRegion texture, ColorF diffuse = Palette::White);
 
-		void checkbox(bool& checked, StringView label = U"");
+		bool checkbox(bool& checked, StringView label = U"");
 
 		template<class T>
 		void radiobutton(T& target, T value, StringView label = U"");

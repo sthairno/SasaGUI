@@ -10,6 +10,7 @@ void Main()
 	bool showTextBox = true;
 
 	Texture texture(Emoji{ U"🎍" });
+	bool checked = false;
 
 	while (System::Update())
 	{
@@ -32,6 +33,7 @@ void Main()
 		gui.windowBegin(U"test1");
 		gui.label(U"Label:"); gui.sameLine(); gui.label(U"test", HSV{ Periodic::Sawtooth0_1(3s) * 360 });
 		gui.label(U"Image:"); gui.sameLine(); gui.image(texture);
+		gui.label(U"CheckBox:"); gui.sameLine(); gui.checkbox(checked, U"HogeHoge");
 		gui.windowEnd();
 
 		gui.windowBegin(U"test2");
