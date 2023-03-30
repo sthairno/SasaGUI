@@ -134,6 +134,31 @@ namespace SasaGUI
 
 		TextEditState& simpleTextBox(StringView id, double width = 200, const Optional<size_t>& maxChars = unspecified);
 
+		void label(StringView text, ColorF color = Palette::Black);
+
+		void image(Texture texture, ColorF color = Palette::White);
+
+		void checkbox(bool& checked, StringView label = U"");
+
+		template<class T>
+		void radiobutton(T& target, T value, StringView label = U"");
+
+		void tab();
+
+		void dropdown();
+
+		void colorpicker(HSV& value);
+
+		template<class T>
+		void slider(T& target, T min, T max);
+
+		template<class T>
+		void spinbox(T& target, T step = static_cast<T>(1), T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max());
+
+		void split();
+
+		void progressbar(double value);
+
 		void custom(std::shared_ptr<IControl> control);
 
 	private:
