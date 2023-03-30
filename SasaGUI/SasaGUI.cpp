@@ -864,6 +864,8 @@ namespace SasaGUI
 
 		double m_renderWidth;
 
+		bool m_mouseOver = false;
+
 		Size computeSize() const override
 		{
 			return SimpleGUI::TextBoxRegion(m_pos, width).size.asPoint();
@@ -873,11 +875,16 @@ namespace SasaGUI
 		{
 			m_pos = rect.pos;
 			m_renderWidth = rect.w;
+			m_mouseOver = cursorPos && rect.contains(*cursorPos);
 		}
 
 		void draw() const
 		{
-			SimpleGUI::TextBox(m_state, m_pos, m_renderWidth, maxChars);
+			Mat3x2 cursorMat = m_mouseOver
+				? Mat3x2::Translate(Cursor::PosF())
+				: Mat3x2::Translate(Cursor::PosF() + Vec2{ 1, 1 });
+			const Transformer2D _{ Mat3x2::Translate(m_pos), cursorMat, Transformer2D::Target::PushLocal };
+			SimpleGUI::TextBox(m_state, { 0, 0 }, m_renderWidth, maxChars);
 		}
 	};
 

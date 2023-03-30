@@ -6,9 +6,8 @@ void Main()
 	Scene::SetBackground(ColorF{ 0.6, 0.8, 0.7 });
 
 	SasaGUI::GUIManager gui;
-	size_t counter = 0;
-	bool showTextBox = true;
 
+	size_t counter = 0;
 	Texture texture(Emoji{ U"🎍" });
 	bool checked = false;
 	int score = 0;
@@ -18,20 +17,15 @@ void Main()
 		ClearPrint();
 		gui.frameBegin();
 
-		showTextBox ^= KeyControl.down();
-
+		gui.windowBegin(U"test1");
+		gui.label(U"Button:"); gui.sameLine();
 		if (gui.button(U"Click here"))
 		{
 			counter++;
 		}
 		Print << counter;
-
-		if (showTextBox)
-		{
-			Print << gui.simpleTextBox(U"test").text;
-		}
-
-		gui.windowBegin(U"test1");
+		gui.label(U"SimpleTextBox:"); gui.sameLine();
+		Print << gui.simpleTextBox(U"test").text;
 		gui.label(U"Label:"); gui.sameLine(); gui.label(U"test", HSV{ Periodic::Sawtooth0_1(3s) * 360 });
 		gui.label(U"Image:"); gui.sameLine(); gui.image(texture);
 		gui.label(U"CheckBox:"); gui.sameLine(); gui.checkbox(checked, U"HogeHoge");
