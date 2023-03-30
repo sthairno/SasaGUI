@@ -159,7 +159,7 @@ namespace SasaGUI
 
 		void dropdown();
 
-		void colorpicker(HSV& value);
+		bool simpleColorpicker(HSV& value);
 
 		template<class T>
 		void slider(T& target, T min, T max);

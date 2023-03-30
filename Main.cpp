@@ -11,13 +11,14 @@ void Main()
 	Texture texture(Emoji{ U"🎍" });
 	bool checked = false;
 	int score = 0;
+	HSV color = Palette::Red;
 
 	while (System::Update())
 	{
 		ClearPrint();
 		gui.frameBegin();
 
-		gui.windowBegin(U"test1");
+		gui.windowBegin(U"Demo1");
 		gui.label(U"Button:"); gui.sameLine();
 		if (gui.button(U"Click here"))
 		{
@@ -44,7 +45,12 @@ void Main()
 		}
 		gui.windowEnd();
 
-		gui.windowBegin(U"test2");
+		gui.windowBegin(U"Demo2");
+		gui.label(U"SimpleColorPicker:");
+		gui.simpleColorpicker(color);
+		gui.windowEnd();
+
+		gui.windowBegin(U"Demo3");
 		gui.dummy({ 60, 80 }); gui.sameLine(); gui.dummy({ 100, 100 });
 		gui.dummy({ 100, 100 });
 		gui.windowEnd();
