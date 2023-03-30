@@ -28,10 +28,7 @@ void Main()
 		}
 
 		gui.windowBegin(U"test1");
-		if (gui.button(U"Click here"))
-		{
-			counter++;
-		}
+		gui.label(U"Label:"); gui.sameLine(); gui.label(U"test", HSV{ Periodic::Sawtooth0_1(3s) * 360 });
 		gui.windowEnd();
 
 		gui.windowBegin(U"test2");

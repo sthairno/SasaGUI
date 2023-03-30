@@ -852,6 +852,47 @@ namespace SasaGUI
 		return textBox.state();
 	}
 
+	// Label
+
+	class Label : public IControl
+	{
+	public:
+
+		Label(StringView text, ColorF color)
+			: m_text(SimpleGUI::GetFont()(text))
+			, m_color(color)
+		{ }
+
+	private:
+
+		DrawableText m_text;
+
+		ColorF m_color;
+
+		Vec2 m_pos;
+
+		Size computeSize() const override
+		{
+			return m_text.region().size.asPoint();
+		}
+
+		void update(Rect rect, Optional<Vec2>) override
+		{
+			m_pos = rect.pos;
+		}
+
+		void draw() const
+		{
+			m_text.draw(m_pos, m_color);
+		}
+	};
+
+	void GUIManager::label(StringView text, ColorF color)
+	{
+		getCurrentWindowImpl()
+			.nextStatelessControl(std::make_shared<Label>(text, color));
+	}
+
 	// Custom
 
 	void GUIManager::custom(std::shared_ptr<IControl> control)
