@@ -142,8 +142,18 @@ namespace SasaGUI
 
 		bool checkbox(bool& checked, StringView label = U"");
 
-		template<class T>
-		void radiobutton(T& target, T value, StringView label = U"");
+		bool radiobutton(bool selected, StringView label = U"");
+
+		template<class T, class U = T>
+		bool radiobutton(T& target, const U& value, StringView label = U"")
+		{
+			bool clicked = radiobutton(target == value, label);
+			if (clicked)
+			{
+				target = value;
+			}
+			return clicked;
+		}
 
 		void tab();
 

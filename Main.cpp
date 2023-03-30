@@ -11,6 +11,7 @@ void Main()
 
 	Texture texture(Emoji{ U"🎍" });
 	bool checked = false;
+	int score = 0;
 
 	while (System::Update())
 	{
@@ -34,6 +35,10 @@ void Main()
 		gui.label(U"Label:"); gui.sameLine(); gui.label(U"test", HSV{ Periodic::Sawtooth0_1(3s) * 360 });
 		gui.label(U"Image:"); gui.sameLine(); gui.image(texture);
 		gui.label(U"CheckBox:"); gui.sameLine(); gui.checkbox(checked, U"HogeHoge");
+		gui.label(U"RadioButton:");
+		gui.radiobutton(score, 0, U"0"); gui.sameLine();
+		gui.radiobutton(score, 1, U"1"); gui.sameLine();
+		gui.radiobutton(score, 2, U"2");
 		gui.windowEnd();
 
 		gui.windowBegin(U"test2");

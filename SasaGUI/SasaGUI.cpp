@@ -15,6 +15,12 @@ namespace SasaGUI
 			constexpr static double CheckLineScale = 0.6;
 			constexpr static double CheckLineTickness = 0.28;
 		};
+
+		struct RadioButton
+		{
+			constexpr static double CircleScale = 0.8;
+			constexpr static double InnerCircleScale = 0.6;
+		};
 	}
 
 	using WindowImpl = detail::WindowImpl;
@@ -1050,6 +1056,78 @@ namespace SasaGUI
 		auto& checkbox = getCurrentWindowImpl()
 			.nextStatelessControl(std::make_shared<CheckBox>(checked, label));
 		return checkbox.valueChanged();
+	}
+
+	// RadioButton
+
+	class RadioButton : public IControl
+	{
+	public:
+
+		using Config = Config::RadioButton;
+
+		RadioButton(bool selected, StringView label)
+			: m_selected(selected)
+			, m_labelText(SimpleGUI::GetFont()(label))
+		{ }
+
+		bool clicked() const { return m_clicked; }
+
+	private:
+
+		bool m_selected;
+
+		DrawableText m_labelText;
+
+		bool m_clicked = false;
+
+		Circle m_circle;
+
+		Vec2 m_labelLeftCenter;
+
+		Size computeSize() const override
+		{
+			Size labelSize = m_labelText.region().size.asPoint();
+			return { labelSize.x + circleSize(), labelSize.y };
+		}
+
+		void update(Rect rect, Optional<Vec2> cursorPos) override
+		{
+			m_circle = { Arg::leftCenter = rect.leftCenter(), static_cast<RectF::size_type::value_type>(circleSize()) / 2 };
+			m_labelLeftCenter = m_circle.right();
+
+			if (cursorPos &&
+				rect.contains(*cursorPos))
+			{
+				Cursor::RequestStyle(CursorStyle::Hand);
+				m_clicked = MouseL.down();
+				m_selected |= m_clicked;
+			}
+		}
+
+		void draw() const override
+		{
+			m_circle.drawFrame(1, Palette::Black);
+			if (m_selected)
+			{
+				Circle{ m_circle.center, m_circle.r * Config::InnerCircleScale }
+					.draw(Palette::Black);
+			}
+			m_labelText
+				.draw(Arg::leftCenter = m_labelLeftCenter, Palette::Black);
+		}
+
+		int32 circleSize() const
+		{
+			return static_cast<int32>(m_labelText.font.height() * Config::CircleScale);
+		}
+	};
+
+	bool GUIManager::radiobutton(bool selected, StringView label)
+	{
+		auto& radioButton = getCurrentWindowImpl()
+			.nextStatelessControl(std::make_shared<RadioButton>(selected, label));
+		return radioButton.clicked();
 	}
 
 	// Custom
