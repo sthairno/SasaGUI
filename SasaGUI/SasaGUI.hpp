@@ -157,17 +157,17 @@ namespace SasaGUI
 
 		size_t& tab(StringView id, Array<String> tabNames, size_t firstIdx = 0);
 
-		void dropdown();
+		// void dropdown();
 
 		bool simpleColorpicker(HSV& value);
 
 		template<class T>
 		void slider(T& target, T min, T max);
 
-		template<class T>
-		void spinbox(T& target, T step = static_cast<T>(1), T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max());
+		// template<class T>
+		// void spinbox(T& target, T step = static_cast<T>(1), T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max());
 
-		void split();
+		// void split();
 
 		void progressbar(double value);
 
