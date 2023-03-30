@@ -893,6 +893,62 @@ namespace SasaGUI
 			.nextStatelessControl(std::make_shared<Label>(text, color));
 	}
 
+	// Image
+
+	class Image : public IControl
+	{
+	public:
+
+		Image(const Texture& texture, ColorF diffuse)
+			: m_texture(texture)
+			, m_diffuse(diffuse)
+		{ }
+
+		Image(const TextureRegion& texture, ColorF diffuse)
+			: m_texture(texture)
+			, m_diffuse(diffuse)
+		{ }
+
+	private:
+
+		const std::variant<Texture, TextureRegion> m_texture;
+
+		ColorF m_diffuse;
+
+		Vec2 m_pos;
+
+		Size computeSize() const override
+		{
+			return std::visit([](const auto& tex) {
+				return tex.region(0.0, 0.0).size.asPoint();
+			}, m_texture);
+		}
+
+		void update(Rect rect, Optional<Vec2>) override
+		{
+			m_pos = rect.pos;
+		}
+
+		void draw() const
+		{
+			std::visit([this](const auto& tex) {
+				tex.draw(m_pos, m_diffuse);
+			}, m_texture);
+		}
+	};
+
+	void GUIManager::image(Texture texture, ColorF diffuse)
+	{
+		getCurrentWindowImpl()
+			.nextStatelessControl(std::make_shared<Image>(texture, diffuse));
+	}
+
+	void GUIManager::image(TextureRegion texture, ColorF diffuse)
+	{
+		getCurrentWindowImpl()
+			.nextStatelessControl(std::make_shared<Image>(texture, diffuse));
+	}
+
 	// Custom
 
 	void GUIManager::custom(std::shared_ptr<IControl> control)

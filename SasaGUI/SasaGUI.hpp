@@ -136,7 +136,9 @@ namespace SasaGUI
 
 		void label(StringView text, ColorF color = Palette::Black);
 
-		void image(Texture texture, ColorF color = Palette::White);
+		void image(Texture texture, ColorF diffuse = Palette::White);
+
+		void image(TextureRegion texture, ColorF diffuse = Palette::White);
 
 		void checkbox(bool& checked, StringView label = U"");
 
