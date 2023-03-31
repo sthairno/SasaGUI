@@ -1354,6 +1354,62 @@ namespace SasaGUI
 		return picker.valueChanged();
 	}
 
+	// SimpleSlider
+
+	class SimpleSlider : public IControl
+	{
+	public:
+
+		SimpleSlider(double& ref, double width)
+			: m_ref(ref)
+			, m_width(width)
+		{ }
+
+		bool valueChanged() const { return m_valueChanged; }
+
+	private:
+
+		double& m_ref;
+
+		double m_width;
+
+		mutable bool m_valueChanged = false;
+
+		Vec2 m_pos;
+
+		Optional<Vec2> m_cursorPos;
+
+		Size computeSize() const override
+		{
+			return SimpleGUI::SliderRegion({ 0, 0 }, 0, m_width).size.asPoint();
+		}
+
+		void update(Rect rect, Optional<Vec2> cursorPos) override
+		{
+			m_pos = rect.pos;
+			m_cursorPos = cursorPos && rect.contains(*cursorPos)
+				? cursorPos
+				: none;
+		}
+
+		void draw() const override
+		{
+			Mat3x2 cursorMat = m_cursorPos
+				? Mat3x2::Translate(Cursor::PosF() - *m_cursorPos)
+				: Mat3x2::Translate(Cursor::PosF() + Vec2{ 1, 1 });
+			const Transformer2D _{ Mat3x2::Identity(), cursorMat, Transformer2D::Target::PushLocal };
+
+			m_valueChanged = SimpleGUI::Slider(m_ref, m_pos, m_width);
+		}
+	};
+
+	bool GUIManager::simpleSlider(double& value, double width)
+	{
+		auto& slider = getCurrentWindowImpl()
+			.nextStatelessControl(std::make_shared<SimpleSlider>(value, width));
+		return slider.valueChanged();
+	}
+
 	// Custom
 
 	void GUIManager::custom(std::shared_ptr<IControl> control)

@@ -161,8 +161,7 @@ namespace SasaGUI
 
 		bool simpleColorpicker(HSV& value);
 
-		template<class T>
-		void slider(T& target, T min, T max);
+		bool simpleSlider(double& value, double width = 120);
 
 		// template<class T>
 		// void spinbox(T& target, T step = static_cast<T>(1), T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max());
