@@ -36,6 +36,8 @@ void Main()
 			case 2: gui.label(U"FooBar (2)"); break;
 			}
 		}
+		gui.label(U"ProgressBar:");
+		gui.progressbar(Periodic::Sine0_1(10s));
 		gui.windowEnd();
 
 		gui.windowBegin(U"Demo2");

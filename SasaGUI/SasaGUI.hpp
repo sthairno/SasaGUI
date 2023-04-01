@@ -168,7 +168,7 @@ namespace SasaGUI
 
 		// void split();
 
-		void progressbar(double value);
+		void progressbar(double value, int32 width = 200);
 
 		void custom(std::shared_ptr<IControl> control);
 

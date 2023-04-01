@@ -31,6 +31,13 @@ namespace SasaGUI
 			constexpr static ColorF TabColor = ColorF{ 0.8 };
 			constexpr static ColorF SelectedTabColor = ColorF::Zero();
 		};
+
+		struct ProgressBar
+		{
+			constexpr static ColorF BackgroundColor{ 0.8 };
+			constexpr static ColorF BarColor = Color{ 13, 110, 253 };
+			constexpr static int32 Height = 16;
+		};
 	}
 
 	using WindowImpl = detail::WindowImpl;
@@ -690,21 +697,21 @@ namespace SasaGUI
 	{
 		m_impl->frameEnd();
 
-		for (auto [idx, layer] : Indexed(m_impl->layers()))
-		{
-			const HSV color{ ((double)idx / 4 * 360), 0.8, 1.0 };
-			for (auto& [id, impl] : layer.container())
-			{
-				auto& window = impl->window;
+		//for (auto [idx, layer] : Indexed(m_impl->layers()))
+		//{
+		//	const HSV color{ ((double)idx / 4 * 360), 0.8, 1.0 };
+		//	for (auto& [id, impl] : layer.container())
+		//	{
+		//		auto& window = impl->window;
 
-				window.rect.drawFrame(1, 0, color);
-				Line{ window.rect.tl(), window.rect.br() }.draw(color);
-				Line{ window.rect.bl(), window.rect.tr() }.draw(color);
+		//		window.rect.drawFrame(1, 0, color);
+		//		Line{ window.rect.tl(), window.rect.br() }.draw(color);
+		//		Line{ window.rect.bl(), window.rect.tr() }.draw(color);
 
-				SimpleGUI::GetFont()(U"{}:{}"_fmt(id, window.displayName))
-					.draw(Arg::bottomLeft = window.rect.tl(), color);
-			}
-		}
+		//		SimpleGUI::GetFont()(U"{}:{}"_fmt(id, window.displayName))
+		//			.draw(Arg::bottomLeft = window.rect.tl(), color);
+		//	}
+		//}
 	}
 
 	void GUIManager::windowBegin(StringView name, WindowFlag flags)
@@ -1408,6 +1415,77 @@ namespace SasaGUI
 		auto& slider = getCurrentWindowImpl()
 			.nextStatelessControl(std::make_shared<SimpleSlider>(value, width));
 		return slider.valueChanged();
+	}
+
+	// ProgressBar
+
+	class ProgressBar : public IControl
+	{
+	public:
+
+		using Config = Config::ProgressBar;
+
+		ProgressBar(double value, int32 width)
+			: m_value(Clamp(value, 0.0, 1.0))
+			, m_width(Max(Config::Height, width))
+		{ }
+
+	private:
+
+		double m_value;
+
+		int32 m_width;
+
+		Rect m_rect;
+
+		Size computeSize() const override
+		{
+			return { m_width, Config::Height };
+		}
+
+		void update(Rect rect, Optional<Vec2>) override
+		{
+			m_rect = rect;
+		}
+
+		void draw() const override
+		{
+			drawBackground();
+			drawBar(m_value);
+		}
+
+		void drawBackground() const
+		{
+			constexpr double circleR = Config::Height * 0.5;
+
+			Line{ m_rect.x + circleR, m_rect.y + circleR, m_rect.rightX() - circleR, m_rect.y + circleR }
+				.draw(LineStyle::RoundCap, Config::Height, Config::BackgroundColor);
+		}
+
+		void drawBar(double value) const
+		{
+			constexpr double circleR = Config::Height * 0.5;
+			double barWidth = m_rect.w * value;
+
+			if (barWidth <= Config::Height)
+			{
+				// 欠けた円を描画
+				Circle{ m_rect.x + circleR, m_rect.y + circleR, circleR }
+					.drawSegment(270_deg, barWidth, Config::BarColor);
+			}
+			else
+			{
+				// 両端が丸い線を描画
+				Line{ m_rect.x + circleR, m_rect.y + circleR, m_rect.x + barWidth - circleR, m_rect.y + circleR }
+					.draw(LineStyle::RoundCap, Config::Height, Config::BarColor);
+			}
+		}
+	};
+
+	void GUIManager::progressbar(double value, int32 width)
+	{
+		getCurrentWindowImpl()
+			.nextStatelessControl(std::make_shared<ProgressBar>(value, width));
 	}
 
 	// Custom
