@@ -18,8 +18,7 @@ void Main()
 	{
 		ClearPrint();
 		gui.frameBegin();
-
-		gui.windowBegin(U"Demo1");
+		
 		gui.label(U"Label:"); gui.sameLine(); gui.label(U"test", HSV{ Periodic::Sawtooth0_1(3s) * 360 });
 		gui.label(U"Image:"); gui.sameLine(); gui.image(texture);
 		gui.label(U"CheckBox:"); gui.sameLine(); gui.checkbox(checked, U"HogeHoge");
@@ -38,9 +37,7 @@ void Main()
 		}
 		gui.label(U"ProgressBar:");
 		gui.progressbar(Periodic::Sine0_1(10s));
-		gui.windowEnd();
 
-		gui.windowBegin(U"Demo2");
 		gui.label(U"Button:"); gui.sameLine();
 		if (gui.button(U"Click here"))
 		{
@@ -54,7 +51,6 @@ void Main()
 		gui.simpleColorpicker(color);
 		gui.label(U"SimpleSlider:");
 		gui.simpleSlider(value);
-		gui.windowEnd();
 		
 		gui.windowBegin(U"Demo3");
 		gui.dummy({ 60, 80 }); gui.sameLine(); gui.dummy({ 100, 100 });

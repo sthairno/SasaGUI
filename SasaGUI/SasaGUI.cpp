@@ -182,6 +182,13 @@ namespace SasaGUI
 
 		private:
 
+			struct WindowLayout
+			{
+				Rect titlebarRect;
+
+				Rect contentRect;
+			};
+
 			String m_id;
 
 			size_t m_randomId;
@@ -194,11 +201,9 @@ namespace SasaGUI
 
 			bool m_firstFrame = true;
 
-			Optional<Rect> m_titlebarRect;
+			Optional<WindowLayout> m_layout;
 
-			Optional<Rect> m_contentRect;
-
-			Size m_contentSize{ 0, 0 };
+			Rect m_contentLocalRect{ 0, 0 };
 
 			Array<std::shared_ptr<IControl>> m_controls;
 
@@ -208,9 +213,7 @@ namespace SasaGUI
 
 			IControl& nextStatefulControlImpl(size_t id, ControlGenerator generator);
 
-			void updateRect();
-
-			void updateRect(Rect rect);
+			void updateLayout();
 		};
 	}
 
@@ -366,7 +369,7 @@ namespace SasaGUI
 		, m_id(id)
 		, m_randomId(RandomUint64())
 	{
-		updateRect();
+		updateLayout();
 	}
 
 	void WindowImpl::frameBegin(InputContext& input)
@@ -379,7 +382,7 @@ namespace SasaGUI
 			switch (m_state)
 			{
 			case SasaGUI::WindowState::Default:
-				if (m_titlebarRect->contains(*cursor))
+				if (m_layout->titlebarRect.contains(*cursor))
 				{
 					input.hover(*this);
 					if (MouseL.down())
@@ -389,7 +392,7 @@ namespace SasaGUI
 						input.capture(*this);
 					}
 				}
-				if (m_contentRect->contains(*cursor))
+				if (m_layout->contentRect.contains(*cursor))
 				{
 					input.hover(*this);
 					if (MouseL.down())
@@ -413,11 +416,12 @@ namespace SasaGUI
 				break;
 			}
 		}
-		updateRect(newRect);
+		window.rect = newRect;
+		updateLayout();
 
 		window.defined = false;
 		window.lineRect = { window.padding, window.padding, 0, 0 };
-		m_contentSize = { 0, 0 };
+		m_contentLocalRect.size = { 0, 0 };
 		m_controls.clear();
 		window.sameLine = false;
 	}
@@ -427,7 +431,7 @@ namespace SasaGUI
 		Rect newRect = rect();
 		if (not m_controls.empty())
 		{
-			m_contentSize += Size{ window.padding, window.padding };
+			m_contentLocalRect.size += { window.padding, window.padding };
 		}
 		if (window.flags & WindowFlag::AutoResize ||
 			m_firstFrame)
@@ -438,13 +442,14 @@ namespace SasaGUI
 			{
 				newRect.h += titlebarHeight();
 			}
-			newRect.size += m_contentSize;
+			newRect.size += m_contentLocalRect.size;
 
 			Size min = minSize();
 			newRect.w = Max(newRect.w, min.x);
 			newRect.h = Max(newRect.h, min.y);
 		}
-		updateRect(newRect);
+		window.rect = newRect;
+		updateLayout();
 		draw();
 
 		m_firstFrame = false;
@@ -460,8 +465,8 @@ namespace SasaGUI
 
 			if (not (window.flags & WindowFlag::NoTitlebar))
 			{
-				m_titlebarRect
-					->rounded(10, 10, 0, 0)
+				m_layout->titlebarRect
+					.rounded(10, 10, 0, 0)
 					.draw(Palette::Lightgray);
 				window.font(window.displayName)
 					.draw(Arg::topCenter = window.rect.topCenter(), Palette::Black);
@@ -469,7 +474,7 @@ namespace SasaGUI
 		}
 
 		{
-			ScopedViewport2D _{ *m_contentRect };
+			ScopedViewport2D _{ m_layout->contentRect };
 			for (auto& control : m_controls)
 			{
 				control->draw();
@@ -503,8 +508,8 @@ namespace SasaGUI
 
 		{
 			Point br = localRect.br();
-			m_contentSize.x = Max(m_contentSize.x, br.x);
-			m_contentSize.y = Max(m_contentSize.y, br.y);
+			m_contentLocalRect.w = Max(m_contentLocalRect.w, br.x);
+			m_contentLocalRect.h = Max(m_contentLocalRect.h, br.y);
 			window.lineRect.w = Max(window.lineRect.w, br.x - window.lineRect.x);
 			window.lineRect.h = Max(window.lineRect.h, br.y - window.lineRect.y);
 		}
@@ -513,10 +518,10 @@ namespace SasaGUI
 		if (auto globalCursorPos = m_input->getCursorPos(*this))
 		{
 			if (m_state == WindowState::Default &&
-				m_contentRect.has_value() &&
-				m_contentRect->contains(*globalCursorPos))
+				m_layout.has_value() &&
+				m_layout->contentRect.contains(*globalCursorPos))
 			{
-				localCursorPos = globalCursorPos->movedBy(-m_contentRect->pos);
+				localCursorPos = globalCursorPos->movedBy(-m_layout->contentRect.pos);
 			}
 		}
 		control->update(localRect, localCursorPos);
@@ -541,34 +546,32 @@ namespace SasaGUI
 		return nextControlImpl(itr->second);
 	}
 
-	void WindowImpl::updateRect()
+	void WindowImpl::updateLayout()
 	{
 		if (window.flags & WindowFlag::NoBackground ||
 			window.flags & WindowFlag::NoTitlebar)
 		{
-			m_titlebarRect = { 0, 0, 0, 0 };
-			m_contentRect = window.rect;
+			m_layout = WindowLayout{
+				.titlebarRect = { 0, 0, 0, 0 },
+				.contentRect = window.rect
+			};
 		}
 		else
 		{
-			m_titlebarRect = {
-				window.rect.pos,
-				window.rect.w,
-				titlebarHeight()
-			};
-			m_contentRect = {
-				window.rect.x,
-				window.rect.y + titlebarHeight(),
-				window.rect.w,
-				window.rect.h - titlebarHeight()
+			m_layout = WindowLayout{
+				.titlebarRect = {
+					window.rect.pos,
+					window.rect.w,
+					titlebarHeight()
+				},
+				.contentRect = {
+					window.rect.x,
+					window.rect.y + titlebarHeight(),
+					window.rect.w,
+					window.rect.h - titlebarHeight()
+				}
 			};
 		}
-	}
-
-	void WindowImpl::updateRect(Rect rect)
-	{
-		window.rect = rect;
-		updateRect();
 	}
 
 	// Layer
@@ -673,7 +676,7 @@ namespace SasaGUI
 		{
 			layer.frameEnd();
 		}
-		Print << m_input.m_hoveredItemId << (m_input.m_captured ? U"🔒" : U"");
+		// Print << m_input.m_hoveredItemId << (m_input.m_captured ? U"🔒" : U"");
 	}
 
 	Layer& GUIImpl::getLayer(WindowLayer layer)
@@ -722,21 +725,21 @@ namespace SasaGUI
 	{
 		m_impl->frameEnd();
 
-		//for (auto [idx, layer] : Indexed(m_impl->layers()))
-		//{
-		//	const HSV color{ ((double)idx / 4 * 360), 0.8, 1.0 };
-		//	for (auto& [id, impl] : layer.container())
-		//	{
-		//		auto& window = impl->window;
+		for (auto [idx, layer] : Indexed(m_impl->layers()))
+		{
+			const HSV color{ ((double)idx / 4 * 360), 0.8, 1.0 };
+			for (auto& [id, impl] : layer.container())
+			{
+				auto& window = impl->window;
 
-		//		window.rect.drawFrame(1, 0, color);
-		//		Line{ window.rect.tl(), window.rect.br() }.draw(color);
-		//		Line{ window.rect.bl(), window.rect.tr() }.draw(color);
+				window.rect.drawFrame(1, 0, color);
+				Line{ window.rect.tl(), window.rect.br() }.draw(color);
+				Line{ window.rect.bl(), window.rect.tr() }.draw(color);
 
-		//		SimpleGUI::GetFont()(U"{}:{}"_fmt(id, window.displayName))
-		//			.draw(Arg::bottomLeft = window.rect.tl(), color);
-		//	}
-		//}
+				SimpleGUI::GetFont()(U"{}:{}"_fmt(id, window.displayName))
+					.draw(Arg::bottomLeft = window.rect.tl(), color);
+			}
+		}
 	}
 
 	void GUIManager::windowBegin(StringView name, WindowFlag flags)
