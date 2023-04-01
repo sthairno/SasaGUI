@@ -4,6 +4,11 @@ namespace SasaGUI
 {
 	namespace Config
 	{
+		struct Common
+		{
+			constexpr static ColorF LabelColor = Palette::Black;
+		};
+
 		struct CheckBox
 		{
 			constexpr static double BoxScale = 0.8;
@@ -18,24 +23,44 @@ namespace SasaGUI
 
 		struct RadioButton
 		{
-			constexpr static double CircleScale = 0.8;
-			constexpr static double InnerCircleScale = 0.6;
+			constexpr static ColorF CircleColor = Palette::White;
+			constexpr static ColorF CheckedCircleColor = Palette::White;
+			constexpr static ColorF HoveredCircleColor{ 0.9 };
+
+			constexpr static ColorF FrameColor{ 0.3 };
+			constexpr static ColorF CheckedFrameColor{ 0.35, 0.7, 1.0 };
+			constexpr static ColorF HoveredFrameColor = Palette::Black;
+
+			constexpr static ColorF LabelColor = Common::LabelColor;
+
+			constexpr static double CircleScale = 0.6; // r = Font::height() * CircleScale / 2
+			constexpr static double InnerCircleScale = 0.6; // r = Font::height() * InnerCircleScale * CircleScale / 2
+			constexpr static int32 CircleMargin = 4;
+			constexpr static int32 CircleFrameThickness = 2;
 		};
 
 		struct Tab
 		{
+			constexpr static ColorF FrameColor = Palette::Black;
+
+			constexpr static ColorF TabColor = ColorF{ 0.95 };
+			constexpr static ColorF HoveredTabColor = ColorF{ 0.8 };
+			constexpr static ColorF SelectedTabColor = ColorF::Zero();
+
+			constexpr static ColorF LabelColor = Common::LabelColor;
+
 			constexpr static int32 FrameThickness = 1;
 			constexpr static int32 TabR = 5;
 			constexpr static int32 TabSpace = 1;
-			constexpr static ColorF FrameColor = Palette::Black;
-			constexpr static ColorF TabColor = ColorF{ 0.8 };
-			constexpr static ColorF SelectedTabColor = ColorF::Zero();
 		};
 
 		struct ProgressBar
 		{
 			constexpr static ColorF BackgroundColor{ 0.8 };
 			constexpr static ColorF BarColor = Color{ 13, 110, 253 };
+			constexpr static ColorF FrameColor = Color::Zero();
+
+			constexpr static int32 FrameThickness = 0;
 			constexpr static int32 Height = 16;
 		};
 	}
@@ -1108,6 +1133,8 @@ namespace SasaGUI
 
 		bool m_selected;
 
+		bool m_hovered;
+
 		DrawableText m_labelText;
 
 		bool m_clicked = false;
@@ -1119,33 +1146,53 @@ namespace SasaGUI
 		Size computeSize() const override
 		{
 			Size labelSize = m_labelText.region().size.asPoint();
-			return { labelSize.x + circleSize(), labelSize.y };
+			return { labelSize.x + circleSize() + Config::CircleMargin, labelSize.y };
 		}
 
 		void update(Rect rect, Optional<Vec2> cursorPos) override
 		{
-			m_circle = { Arg::leftCenter = rect.leftCenter(), static_cast<RectF::size_type::value_type>(circleSize()) / 2 };
-			m_labelLeftCenter = m_circle.right();
+			m_circle = { Arg::leftCenter = rect.leftCenter(), static_cast<RectF::size_type::value_type>(circleSize()) / 2};
+			m_labelLeftCenter = m_circle.right() + Vec2{ Config::CircleMargin, 0 };
 
-			if (cursorPos &&
-				rect.contains(*cursorPos))
+			m_hovered = cursorPos && rect.contains(*cursorPos);
+			m_clicked = m_hovered && MouseL.down();
+			m_selected |= m_clicked;
+
+			if (m_hovered)
 			{
 				Cursor::RequestStyle(CursorStyle::Hand);
-				m_clicked = MouseL.down();
-				m_selected |= m_clicked;
 			}
 		}
 
 		void draw() const override
 		{
-			m_circle.drawFrame(1, Palette::Black);
+			ColorF color, frameColor;
+			if (m_selected)
+			{
+				color = Config::CheckedCircleColor;
+				frameColor = Config::CheckedFrameColor;
+			}
+			else if (m_hovered)
+			{
+				color = Config::HoveredCircleColor;
+				frameColor = Config::HoveredFrameColor;
+			}
+			else
+			{
+				color = Config::CircleColor;
+				frameColor = Config::FrameColor;
+			}
+
+			m_circle
+				.draw(color)
+				.drawFrame(Config::CircleFrameThickness, frameColor);
 			if (m_selected)
 			{
 				Circle{ m_circle.center, m_circle.r * Config::InnerCircleScale }
-					.draw(Palette::Black);
+					.draw(frameColor);
 			}
 			m_labelText
-				.draw(Arg::leftCenter = m_labelLeftCenter, Palette::Black);
+				.draw(Arg::leftCenter = m_labelLeftCenter, Config::LabelColor);
 		}
 
 		int32 circleSize() const
@@ -1243,6 +1290,8 @@ namespace SasaGUI
 			{
 				bool selected = idx == selectedIdx;
 
+				// タブ内部
+
 				if (selected)
 				{
 					tab.globalRect
@@ -1254,8 +1303,10 @@ namespace SasaGUI
 				{
 					tab.globalRect
 						.rounded(Config::TabR, Config::TabR, 0, 0)
-						.draw(Config::TabColor);
+						.draw(tab.mouseOver ? Config::HoveredTabColor : Config::TabColor);
 				}
+
+				// タブ枠線
 
 				LineString frame;
 				{
@@ -1269,11 +1320,17 @@ namespace SasaGUI
 				}
 				frame.draw(LineStyle::Uncapped, Config::FrameThickness, Config::FrameColor);
 
-				tab.label.drawAt(tab.globalRect.center(), Palette::Black);
+				// タブ文字列
+
+				tab.label.drawAt(tab.globalRect.center(), Config::LabelColor);
 			}
+
+			// タブ下部下線
 
 			if (selectedIdx < m_tabs.size())
 			{
+				// 選択されているタブの下は空ける
+
 				auto& firstTab = m_tabs.front();
 				auto& selectedTab = m_tabs[selectedIdx];
 				auto& lastTab = m_tabs.back();
@@ -1284,6 +1341,8 @@ namespace SasaGUI
 			}
 			else
 			{
+				// 範囲外のときは空けない
+
 				auto& firstTab = m_tabs.front();
 				auto& lastTab = m_tabs.back();
 				Rect{
@@ -1458,8 +1517,9 @@ namespace SasaGUI
 		{
 			constexpr double circleR = Config::Height * 0.5;
 
-			Line{ m_rect.x + circleR, m_rect.y + circleR, m_rect.rightX() - circleR, m_rect.y + circleR }
-				.draw(LineStyle::RoundCap, Config::Height, Config::BackgroundColor);
+			RoundRect{ m_rect.pos, m_rect.w, Config::Height, circleR }
+				.draw(Config::BackgroundColor)
+				.drawFrame(0, Config::FrameThickness, Config::FrameColor);
 		}
 
 		void drawBar(double value) const
@@ -1476,8 +1536,8 @@ namespace SasaGUI
 			else
 			{
 				// 両端が丸い線を描画
-				Line{ m_rect.x + circleR, m_rect.y + circleR, m_rect.x + barWidth - circleR, m_rect.y + circleR }
-					.draw(LineStyle::RoundCap, Config::Height, Config::BarColor);
+				RoundRect{ m_rect.pos, barWidth, Config::Height, circleR }
+					.draw(Config::BarColor);
 			}
 		}
 	};
