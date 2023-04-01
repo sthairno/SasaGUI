@@ -9,6 +9,18 @@ namespace SasaGUI
 			constexpr static ColorF LabelColor = Palette::Black;
 		};
 
+		struct Window
+		{
+			constexpr static ColorF BackColor{ 0.9 };
+			constexpr static ColorF FrameColor{ 0.7 };
+			constexpr static ColorF TitlebarColor = Palette::Lightgray;
+			constexpr static ColorF TitlebarLabelColor = Common::LabelColor;
+
+			constexpr static Size DefaultWindowSize{ 100, 100 };
+			constexpr static int32 Roundness = 3;
+			constexpr static int32 FrameThickness = 2;
+		};
+
 		struct CheckBox
 		{
 			constexpr static double BoxScale = 0.8;
@@ -119,6 +131,8 @@ namespace SasaGUI
 		{
 		public:
 
+			using Config = Config::Window;
+
 			using ControlGenerator = std::function<std::shared_ptr<IControl>()>;
 
 			WindowImpl(InputContext& input, StringView id, StringView name);
@@ -143,11 +157,11 @@ namespace SasaGUI
 				}
 				else if (window.flags & WindowFlag::NoTitlebar)
 				{
-					return { 20, 20 };
+					return { Config::Roundness * 2, Config::Roundness * 2 };
 				}
 				else
 				{
-					return { 20,  Max(20, titlebarHeight()) };
+					return { Config::Roundness * 2,  Max(Config::Roundness * 2, titlebarHeight()) };
 				}
 			}
 
@@ -362,7 +376,7 @@ namespace SasaGUI
 	WindowImpl::WindowImpl(InputContext& input, StringView id, StringView name)
 		: window({
 			.displayName = String{ name },
-			.rect = { 0, 0, 100, 100 }
+			.rect = { 0, 0, Config::DefaultWindowSize }
 		})
 		, m_controls()
 		, m_input(&input)
@@ -459,17 +473,17 @@ namespace SasaGUI
 	{
 		if (not (window.flags & WindowFlag::NoBackground))
 		{
-			RoundRect{ window.rect, 10 }
-				.drawFrame(0, 1, Palette::Lightgray)
+			RoundRect{ window.rect, Config::Roundness }
+				.drawFrame(0, Config::FrameThickness, Config::FrameColor)
 				.draw(ColorF{ 0.9 });
 
 			if (not (window.flags & WindowFlag::NoTitlebar))
 			{
 				m_layout->titlebarRect
-					.rounded(10, 10, 0, 0)
-					.draw(Palette::Lightgray);
+					.rounded(Config::Roundness, Config::Roundness, 0, 0)
+					.draw(Config::TitlebarColor);
 				window.font(window.displayName)
-					.draw(Arg::topCenter = window.rect.topCenter(), Palette::Black);
+					.draw(Arg::topCenter = window.rect.topCenter(), Config::TitlebarLabelColor);
 			}
 		}
 
