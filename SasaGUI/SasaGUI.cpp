@@ -49,6 +49,7 @@ namespace SasaGUI
 			constexpr static Size DefaultWindowSize{ 100, 100 };
 			constexpr static int32 Roundness = 3;
 			constexpr static int32 FrameThickness = 2;
+			constexpr static int32 ResizeGripSize = 5;
 		};
 
 		struct CheckBox
@@ -152,6 +153,25 @@ namespace SasaGUI
 		Default, Moving, Resizing, Scrolling
 	};
 
+	enum class Side : int32
+	{
+		Top,
+		Right,
+		Bottom,
+		Left,
+		Count
+	};
+
+	enum class ResizeFlag : uint8
+	{
+		None = 0,
+		Top = 1 << static_cast<int32>(Side::Top),
+		Right = 1 << static_cast<int32>(Side::Right),
+		Bottom = 1 << static_cast<int32>(Side::Bottom),
+		Left = 1 << static_cast<int32>(Side::Left)
+	};
+	DEFINE_BITMASK_OPERATORS(ResizeFlag);
+
 	struct WindowLayout
 	{
 		// タイトルバー領域
@@ -162,6 +182,9 @@ namespace SasaGUI
 
 		// ウィンドウ内のスクロールバーを除いた領域
 		Rect contentRect;
+
+		// リサイズの四角形
+		std::array<Rect, static_cast<int32>(Side::Count)> resizeGripRect;
 	};
 
 	class Delay
@@ -526,7 +549,18 @@ namespace SasaGUI
 
 			const Rect& rect() const { return window.rect; }
 
-			int32 titlebarHeight() const { return window.font.height(); }
+			int32 titlebarHeight() const
+			{
+				if (window.flags & WindowFlag::NoBackground ||
+					window.flags & WindowFlag::NoTitlebar)
+				{
+					return 0;
+				}
+				else
+				{
+					return window.font.height();
+				}
+			}
 
 			Size minSize() const
 			{
@@ -534,13 +568,9 @@ namespace SasaGUI
 				{
 					return { 0, 0 };
 				}
-				else if (window.flags & WindowFlag::NoTitlebar)
-				{
-					return { Max(Config::Roundness * 2, ContentMinSize), Max(Config::Roundness * 2, ContentMinSize) };
-				}
 				else
 				{
-					return { Max(Config::Roundness * 2, ContentMinSize),  Max(Config::Roundness * 2, titlebarHeight() + ContentMinSize) };
+					return { Max(Config::Roundness * 2, ContentMinSize), Max(Config::Roundness * 2, titlebarHeight() + ContentMinSize) };
 				}
 			}
 
@@ -580,6 +610,8 @@ namespace SasaGUI
 			InputContext* m_input;
 
 			WindowState m_state = WindowState::Default;
+
+			ResizeFlag m_resizeFlag = ResizeFlag::None;
 
 			bool m_isContentHovered = false;
 
@@ -677,6 +709,27 @@ namespace SasaGUI
 	static StringView ToString(WindowLayer layer)
 	{
 		return std::array{ U"Background", U"Normal", U"Foreground" } [static_cast<int32>(layer)] ;
+	}
+
+	static CursorStyle ToCursorStyle(ResizeFlag flag)
+	{
+		switch (flag)
+		{
+		case ResizeFlag::Top:
+		case ResizeFlag::Bottom:
+			return CursorStyle::ResizeUpDown;
+		case ResizeFlag::Top | ResizeFlag::Right:
+		case ResizeFlag::Bottom | ResizeFlag::Left:
+			return CursorStyle::ResizeNESW;
+		case ResizeFlag::Right:
+		case ResizeFlag::Left:
+			return CursorStyle::ResizeLeftRight;
+		case ResizeFlag::Right | ResizeFlag::Bottom:
+		case ResizeFlag::Left | ResizeFlag::Top:
+			return CursorStyle::ResizeNWSE;
+		default:
+			return CursorStyle::Default;
+		}
 	}
 
 	// InputContext
@@ -808,6 +861,10 @@ namespace SasaGUI
 		autoResize();
 		updateLayout();
 		draw();
+		if (m_resizeFlag != ResizeFlag::None)
+		{
+			Cursor::RequestStyle(ToCursorStyle(m_resizeFlag));
+		}
 
 		m_firstFrame = false;
 	}
@@ -929,6 +986,28 @@ namespace SasaGUI
 			{
 			case SasaGUI::WindowState::Default:
 
+				m_resizeFlag = ResizeFlag::None;
+				for (int32 i = 0; i < static_cast<int32>(Side::Count); i++)
+				{
+					auto& grip = m_layout->resizeGripRect[i];
+
+					if (grip.contains(*cursor))
+					{
+						m_resizeFlag |= static_cast<ResizeFlag>(1 << i);
+					}
+				}
+				if (m_resizeFlag != ResizeFlag::None)
+				{
+					if (MouseL.down())
+					{
+						m_state = WindowState::Resizing;
+						window.requestMoveToFront = true;
+						m_input->capture(*this, true);
+					}
+					m_input->hover(*this);
+					break;
+				}
+
 				if (m_layout->titlebarRect.contains(*cursor))
 				{
 					if (MouseL.down())
@@ -997,6 +1076,30 @@ namespace SasaGUI
 		{
 			return;
 		}
+
+		auto delta = Cursor::Delta();
+
+		if (m_resizeFlag & ResizeFlag::Left)
+		{
+			delta.x = Min(delta.x, window.rect.w - ContentMinSize);
+			window.rect.x += delta.x;
+			window.rect.w -= delta.x;
+		}
+		else if (m_resizeFlag & ResizeFlag::Right)
+		{
+			window.rect.w = Max(window.rect.w + delta.x, ContentMinSize);
+		}
+
+		if (m_resizeFlag & ResizeFlag::Top)
+		{
+			delta.y = Min(delta.y, window.rect.h - ContentMinSize - titlebarHeight());
+			window.rect.y += delta.y;
+			window.rect.h -= delta.y;
+		}
+		else if (m_resizeFlag & ResizeFlag::Bottom)
+		{
+			window.rect.h = Max(window.rect.h + delta.y, ContentMinSize + titlebarHeight());
+		}
 	}
 
 	void WindowImpl::updateLayout()
@@ -1009,6 +1112,40 @@ namespace SasaGUI
 				.clientRect = window.rect,
 				.contentRect = window.rect
 			};
+
+			// ResizeGrip
+
+			if (not (window.flags & WindowFlag::NoResize))
+			{
+				// Top
+				m_layout->resizeGripRect[0] = {
+					window.rect.leftX() - Config::ResizeGripSize,
+					window.rect.topY() - Config::ResizeGripSize,
+					window.rect.w + Config::ResizeGripSize * 2,
+					Config::ResizeGripSize
+				};
+				// Right
+				m_layout->resizeGripRect[1] = {
+					window.rect.rightX(),
+					window.rect.topY() - Config::ResizeGripSize,
+					Config::ResizeGripSize,
+					window.rect.h + Config::ResizeGripSize * 2,
+				};
+				// Bottom
+				m_layout->resizeGripRect[2] = {
+					window.rect.leftX() - Config::ResizeGripSize,
+					window.rect.bottomY(),
+					window.rect.w + Config::ResizeGripSize * 2,
+					Config::ResizeGripSize
+				};
+				// Left
+				m_layout->resizeGripRect[3] = {
+					window.rect.leftX() - Config::ResizeGripSize,
+					window.rect.topY() - Config::ResizeGripSize,
+					Config::ResizeGripSize,
+					window.rect.h + Config::ResizeGripSize * 2,
+				};
+			}
 		}
 		else
 		{
@@ -1027,50 +1164,67 @@ namespace SasaGUI
 				.clientRect = client,
 				.contentRect = client
 			};
+
+			// ResizeGrip
+
+			if (not (window.flags & WindowFlag::NoResize))
+			{
+				// Top
+				m_layout->resizeGripRect[0] = {
+					window.rect.leftX() - Config::ResizeGripSize,
+					window.rect.topY(),
+					window.rect.w + Config::ResizeGripSize * 2,
+					Config::ResizeGripSize
+				};
+				// Right
+				m_layout->resizeGripRect[1] = {
+					window.rect.rightX(),
+					window.rect.topY(),
+					Config::ResizeGripSize,
+					window.rect.h + Config::ResizeGripSize,
+				};
+				// Bottom
+				m_layout->resizeGripRect[2] = {
+					window.rect.leftX() - Config::ResizeGripSize,
+					window.rect.bottomY(),
+					window.rect.w + Config::ResizeGripSize * 2,
+					Config::ResizeGripSize
+				};
+				// Left
+				m_layout->resizeGripRect[3] = {
+					window.rect.leftX() - Config::ResizeGripSize,
+					window.rect.topY(),
+					Config::ResizeGripSize,
+					window.rect.h + Config::ResizeGripSize,
+				};
+			}
 		}
 
 		//スクロールバー
 
-		if (window.flags & WindowFlag::NoScrollbar)
-		{
-			return;
-		}
+		bool hbar = false;
+		bool vbar = false;
 
-		bool hbar = m_contentLocalRect.w > m_layout->contentRect.w;
-		bool vbar = m_contentLocalRect.h > m_layout->contentRect.h;
+		if (not (window.flags & WindowFlag::NoScrollbar))
+		{
+			hbar = m_contentLocalRect.w > m_layout->contentRect.w;
+			vbar = m_contentLocalRect.h > m_layout->contentRect.h;
 
-		// バーの表示によってコントロールが隠れるときはスクロールバーを表示
-		if (hbar)
-		{
-			vbar |= m_contentLocalRect.h > m_layout->contentRect.h - ScrollBar::Thickness;
-		}
-		if (vbar)
-		{
-			hbar |= m_contentLocalRect.w > m_layout->contentRect.w - ScrollBar::Thickness;
+			// バーの表示によってコントロールが隠れるときはスクロールバーを表示
+
+			if (hbar)
+			{
+				vbar |= m_contentLocalRect.h > m_layout->contentRect.h - ScrollBar::Thickness;
+			}
+			if (vbar)
+			{
+				hbar |= m_contentLocalRect.w > m_layout->contentRect.w - ScrollBar::Thickness;
+			}
 		}
 
 		// バーの大きさとコントロールが表示できる領域を決定
-		if (hbar && not vbar)
-		{
-			m_scrollBars[0].updateLayout({
-				0,
-				m_layout->clientRect.h - ScrollBar::Thickness,
-				m_layout->clientRect.w,
-				ScrollBar::Thickness
-			});
-			m_layout->contentRect.h -= m_scrollBars[0].rect().h;
-		}
-		else if (not hbar && vbar)
-		{
-			m_scrollBars[1].updateLayout({
-				m_layout->clientRect.w - ScrollBar::Thickness,
-				0,
-				ScrollBar::Thickness,
-				m_layout->clientRect.h
-			});
-			m_layout->contentRect.w -= m_scrollBars[1].rect().w;
-		}
-		else if (hbar && vbar)
+
+		if (hbar && vbar)
 		{
 			m_scrollBars[0].updateLayout({
 				0,
@@ -1084,19 +1238,54 @@ namespace SasaGUI
 				ScrollBar::Thickness,
 				m_layout->clientRect.h - ScrollBar::Thickness
 			});
-			m_layout->contentRect.h -= m_scrollBars[0].rect().h;
-			m_layout->contentRect.w -= m_scrollBars[1].rect().w;
+			m_layout->contentRect.h -= ScrollBar::Thickness;
+			m_layout->contentRect.w -= ScrollBar::Thickness;
+		}
+		else
+		{
+			if (hbar)
+			{
+				m_layout->contentRect.h -= ScrollBar::Thickness;
+			}
+
+			if (vbar)
+			{
+				m_layout->contentRect.w -= ScrollBar::Thickness;
+			}
+
+			m_scrollBars[0].updateLayout({
+				0,
+				m_layout->clientRect.h - ScrollBar::Thickness,
+				m_layout->clientRect.w - ScrollBar::Thickness,
+				ScrollBar::Thickness
+			});
+
+			m_scrollBars[1].updateLayout({
+				m_layout->clientRect.w - ScrollBar::Thickness,
+				0,
+				ScrollBar::Thickness,
+				m_layout->clientRect.h - ScrollBar::Thickness
+			});
 		}
 
-		if (hbar && vbar)
+		// スクロールバーの上限, 下限を更新
+
+		if (hbar)
 		{
-			m_scrollBars[0].updateConstraints(0.0, m_contentLocalRect.w + ScrollBar::Thickness, m_layout->contentRect.w);
 			m_scrollBars[1].updateConstraints(0.0, m_contentLocalRect.h + ScrollBar::Thickness, m_layout->contentRect.h);
 		}
 		else
 		{
-			m_scrollBars[0].updateConstraints(0.0, m_contentLocalRect.w, m_layout->contentRect.w);
 			m_scrollBars[1].updateConstraints(0.0, m_contentLocalRect.h, m_layout->contentRect.h);
+		}
+
+		if (vbar)
+		{
+			m_scrollBars[0].updateConstraints(0.0, m_contentLocalRect.w + ScrollBar::Thickness, m_layout->contentRect.w);
+		}
+		else
+		{
+			m_scrollBars[0].updateConstraints(0.0, m_contentLocalRect.w, m_layout->contentRect.w);
 		}
 	}
 
@@ -1271,21 +1460,21 @@ namespace SasaGUI
 	{
 		m_impl->frameEnd();
 
-		for (auto [idx, layer] : Indexed(m_impl->layers()))
-		{
-			const HSV color{ ((double)idx / 4 * 360), 0.8, 1.0 };
-			for (auto& [id, impl] : layer.container())
-			{
-				auto& window = impl->window;
+		//for (auto [idx, layer] : Indexed(m_impl->layers()))
+		//{
+		//	const HSV color{ ((double)idx / 4 * 360), 0.8, 1.0 };
+		//	for (auto& [id, impl] : layer.container())
+		//	{
+		//		auto& window = impl->window;
 
-				window.rect.drawFrame(1, 0, color);
-				Line{ window.rect.tl(), window.rect.br() }.draw(color);
-				Line{ window.rect.bl(), window.rect.tr() }.draw(color);
+		//		window.rect.drawFrame(1, 0, color);
+		//		Line{ window.rect.tl(), window.rect.br() }.draw(color);
+		//		Line{ window.rect.bl(), window.rect.tr() }.draw(color);
 
-				SimpleGUI::GetFont()(U"{}:{}"_fmt(id, window.displayName))
-					.draw(Arg::bottomLeft = window.rect.tl(), color);
-			}
-		}
+		//		SimpleGUI::GetFont()(U"{}:{}"_fmt(id, window.displayName))
+		//			.draw(Arg::bottomLeft = window.rect.tl(), color);
+		//	}
+		//}
 	}
 
 	void GUIManager::windowBegin(StringView name, WindowFlag flags)
