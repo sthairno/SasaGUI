@@ -2,11 +2,41 @@
 
 namespace SasaGUI
 {
+	using WindowImpl = detail::WindowImpl;
+	using GUIImpl = detail::GUIImpl;
+
 	namespace Config
 	{
 		struct Common
 		{
 			constexpr static ColorF LabelColor = Palette::Black;
+		};
+
+		struct ScrollBar
+		{
+			// |          ______________     |
+			// |  =======|______________|==  |
+			// |                             |
+			//    ^---------Track---------^
+			//           ^-----Thumb----^
+
+			constexpr static ColorF BackgroundColor{ 1, 0 };
+			constexpr static ColorF TrackColor{ 0, 0 };
+			constexpr static ColorF ThumbColor{ 0.4, 0.7 };
+			constexpr static ColorF HoveredBackgroundColor{ 1, 1 };
+			constexpr static ColorF HoveredTrackColor{ 0, 0.1 };
+			constexpr static ColorF HoveredThumbColor{ 0.4, 1 };
+
+			constexpr static int32 TrackMargin = 3;
+			constexpr static int32 ThumbThickness = 6;
+			constexpr static int32 ThumbMinLength = 20;
+
+			constexpr static Duration ScrollSmoothTime = 0.1s;
+			constexpr static Duration LargeScrollDelay = 0.8s;
+			constexpr static Duration LargeScrollInterval = 0.1s;
+			constexpr static Duration FadeInDuration = 0.06s;
+			constexpr static Duration FadeOutDuration = 0.5s;
+			constexpr static Duration FadeOutDelay = 2s;
 		};
 
 		struct Window
@@ -77,9 +107,6 @@ namespace SasaGUI
 		};
 	}
 
-	using WindowImpl = detail::WindowImpl;
-	using GUIImpl = detail::GUIImpl;
-
 	class Layer;
 	class InputContext;
 
@@ -122,7 +149,357 @@ namespace SasaGUI
 
 	enum class WindowState
 	{
-		Default, Moving, Resizing
+		Default, Moving, Resizing, Scrolling
+	};
+
+	struct WindowLayout
+	{
+		// タイトルバー領域
+		Rect titlebarRect;
+
+		// ウィンドウ内の領域
+		Rect clientRect;
+
+		// ウィンドウ内のスクロールバーを除いた領域
+		Rect contentRect;
+	};
+
+	class Delay
+	{
+	public:
+
+		constexpr Delay(Duration duration) noexcept
+			: m_duration(duration.count())
+			, m_time(m_duration)
+		{
+			assert(duration >= 0s);
+		}
+
+		bool update(bool in, double d = Scene::DeltaTime()) noexcept
+		{
+			if (in)
+			{
+				m_time = 0.0;
+			}
+			else
+			{
+				m_time += d;
+			}
+			return in || m_time <= m_duration;
+		}
+
+	private:
+
+		double m_duration;
+
+		double m_time;
+	};
+
+	struct Repeat
+	{
+	public:
+
+		Repeat(Duration interval, Duration delay = 0s)
+			: m_interval(interval.count())
+			, m_delay(delay.count())
+		{
+			assert(interval > 0s);
+			assert(delay >= 0s);
+		}
+
+		bool update(bool in, double d = Scene::DeltaTime()) noexcept
+		{
+			if (not in)
+			{
+				m_first = true;
+				m_delayed = false;
+				return false;
+			}
+
+			bool out = false;
+
+			if (m_first)
+			{
+				out = true;
+				m_accumulation = 0.0;
+				m_first = false;
+			}
+
+			m_accumulation += d;
+
+			if (not m_delayed)
+			{
+				if (m_accumulation < m_delay)
+				{
+					return out;
+				}
+
+				out = true;
+				m_accumulation -= m_delay;
+				m_delayed = true;
+			}
+
+			double count = std::floor(m_accumulation / m_interval);
+			out |= count > 0.0;
+			m_accumulation -= count * m_interval;
+
+			return out;
+		}
+
+	private:
+
+		double m_interval;
+
+		double m_delay;
+
+		bool m_first = true;
+
+		bool m_delayed = false;
+
+		double m_accumulation = 0.0;
+	};
+
+	enum class Orientation
+	{
+		Horizontal, Vertical
+	};
+
+	class ScrollBar
+	{
+	public:
+
+		using Config = Config::ScrollBar;
+
+		constexpr static int32 Thickness = Config::TrackMargin * 2 + Config::ThumbThickness;
+		constexpr static int32 MinLength = Config::TrackMargin * 2 + Config::ThumbMinLength;
+		constexpr static double ThumbRoundness = Config::ThumbThickness * 0.5;
+
+		ScrollBar(Orientation orientation)
+			: orientation(orientation)
+		{
+			updateLayout({ 0, 0, 0, 0 });
+		}
+
+	public:
+
+		const Orientation orientation;
+
+		Rect rect() const { return m_rect; }
+
+		double minimum() const { return m_minimum; }
+
+		double maximum() const { return m_maximum; }
+
+		double value() const { return m_value; }
+
+		double viewportSize() const { return m_viewportSize; }
+
+		void updateLayout(Rect rect)
+		{
+			m_rect = rect;
+			switch (orientation)
+			{
+			case Orientation::Horizontal:
+				m_rect.w = Max(m_rect.w, MinLength);
+				m_rect.h = Thickness;
+				break;
+			case Orientation::Vertical:
+				m_rect.w = Thickness;
+				m_rect.h = Max(m_rect.h, MinLength);
+				break;
+			}
+			m_trackRect = m_rect.stretched(-Config::TrackMargin);
+		}
+
+		void updateConstraints(double minimum, double maximum, double viewportSize)
+		{
+			m_minimum = minimum;
+			m_maximum = maximum;
+			m_viewportSize = viewportSize;
+			m_value = Clamp(m_value, m_minimum, m_maximum - m_viewportSize);
+		}
+
+		void show()
+		{
+			m_colorTransitionDelay.update(true);
+		}
+
+		void scroll(double delta)
+		{
+			if (delta == 0.0)
+			{
+				return;
+			}
+
+			if (Math::Sign(delta) != Math::Sign(m_scrollVelocity))
+			{
+				m_scrollVelocity = 0.0;
+			}
+			m_scrollTarget = Clamp(m_value + delta, m_minimum, m_maximum - m_viewportSize);
+		}
+
+		void moveTo(double value)
+		{
+			m_value = Clamp(value, m_minimum, m_maximum - m_viewportSize);
+			m_scrollTarget = m_value;
+			m_scrollVelocity = 0.0;
+		}
+
+		void update(Optional<Vec2> cursorPos = Cursor::PosF(), double deltaTime = Scene::DeltaTime())
+		{
+			bool rectHovered = false;
+			Optional<double> hoveredPos;
+			RectF thumbRect = getThumbRect();
+
+			if (not MouseL.pressed())
+			{
+				m_thumbGrabbed = false;
+				m_trackPressed = false;
+			}
+
+			if (cursorPos.has_value())
+			{
+				rectHovered = m_rect.contains(*cursorPos);
+				hoveredPos = getHoveredPos(*cursorPos);
+
+				if (MouseL.down() && thumbRect.area() > 0.0)
+				{
+					if (thumbRect.contains(*cursorPos))
+					{
+						m_thumbGrabbed = true;
+					}
+					else if (rectHovered)
+					{
+						m_largeScrollDirection = Math::Sign(*hoveredPos - m_value);
+						m_largeScrollTarget = *hoveredPos;
+						m_trackPressed = true;
+					}
+				}
+			}
+
+			if (m_thumbGrabbed && hoveredPos)
+			{
+				moveTo(*hoveredPos - m_viewportSize * 0.5);
+			}
+
+			if (m_largeScrollTimer.update(m_trackPressed, deltaTime))
+			{
+				scroll(m_largeScrollDirection * m_viewportSize);
+				if (m_value <= m_largeScrollTarget &&
+					m_largeScrollTarget <= m_value + m_viewportSize)
+				{
+					m_trackPressed = false;
+				}
+				if (m_value <= m_minimum ||
+					m_maximum - m_viewportSize <= m_value)
+				{
+					m_trackPressed = false;
+				}
+			}
+
+			m_value = Math::SmoothDamp(m_value, m_scrollTarget, m_scrollVelocity, Config::ScrollSmoothTime.count());
+
+			bool show = (rectHovered || m_thumbGrabbed || m_trackPressed) && thumbRect.area() > 0.0;
+			m_colorTransition.update(m_colorTransitionDelay.update(show, deltaTime), deltaTime);
+		}
+
+		void draw() const
+		{
+			RectF thumbRect = getThumbRect();
+
+			double f = m_colorTransition.value();
+			ColorF backColor = Config::BackgroundColor.lerp(Config::HoveredBackgroundColor, f);
+			ColorF trackColor = Config::TrackColor.lerp(Config::HoveredTrackColor, f);
+			ColorF thumbColor = Config::ThumbColor.lerp(Config::HoveredThumbColor, f);
+			m_rect
+				.draw(backColor);
+			m_trackRect
+				.rounded(ThumbRoundness)
+				.draw(trackColor);
+			if (thumbRect.area() > 0.0)
+			{
+				thumbRect
+					.rounded(ThumbRoundness)
+					.draw(thumbColor);
+			}
+		}
+
+	private:
+
+		double m_minimum = 0.0;
+
+		double m_maximum = 1.0;
+
+		double m_value = 0.0;
+
+		double m_viewportSize = 1.0;
+
+		Rect m_rect;
+
+		Rect m_trackRect;
+
+		bool m_thumbGrabbed = false;
+
+		bool m_trackPressed = false;
+
+		double m_scrollTarget = 0.0;
+
+		double m_scrollVelocity = 0.0;
+
+		int32 m_largeScrollDirection = 0;
+
+		double m_largeScrollTarget = 0.0;
+
+		Repeat m_largeScrollTimer{ Config::LargeScrollInterval, Config::LargeScrollDelay };
+
+		Transition m_colorTransition{ Config::FadeInDuration, Config::FadeOutDuration };
+
+		Delay m_colorTransitionDelay{ Config::FadeOutDelay };
+
+		RectF getThumbRect() const
+		{
+			double length = m_viewportSize / (m_maximum - m_minimum);
+			double pos = m_value / (m_maximum - m_minimum);
+
+			if (length >= 1.0)
+			{
+				return { 0, 0, 0, 0 };
+			}
+
+			switch (orientation)
+			{
+			case Orientation::Horizontal:
+				return {
+					m_trackRect.x + m_trackRect.w * pos,
+					m_trackRect.y,
+					m_trackRect.w * length,
+					m_trackRect.h
+				};
+			case Orientation::Vertical:
+				return {
+					m_trackRect.x,
+					m_trackRect.y + m_trackRect.h * pos,
+					m_trackRect.w,
+					m_trackRect.h * length
+				};
+			}
+		}
+
+		double getHoveredPos(Vec2 cursorPos) const
+		{
+			double value = 0.0;
+			switch (orientation)
+			{
+			case Orientation::Horizontal:
+				value = (cursorPos.x - m_trackRect.x) / m_trackRect.w;
+				break;
+			case Orientation::Vertical:
+				value = (cursorPos.y - m_trackRect.y) / m_trackRect.h;
+				break;
+			}
+			value *= m_maximum - m_minimum;
+			return value;
+		}
 	};
 
 	namespace detail
@@ -134,6 +511,8 @@ namespace SasaGUI
 			using Config = Config::Window;
 
 			using ControlGenerator = std::function<std::shared_ptr<IControl>()>;
+
+			constexpr static int32 ContentMinSize = ScrollBar::MinLength + ScrollBar::Thickness;
 
 			WindowImpl(InputContext& input, StringView id, StringView name);
 
@@ -157,11 +536,11 @@ namespace SasaGUI
 				}
 				else if (window.flags & WindowFlag::NoTitlebar)
 				{
-					return { Config::Roundness * 2, Config::Roundness * 2 };
+					return { Max(Config::Roundness * 2, ContentMinSize), Max(Config::Roundness * 2, ContentMinSize) };
 				}
 				else
 				{
-					return { Config::Roundness * 2,  Max(Config::Roundness * 2, titlebarHeight()) };
+					return { Max(Config::Roundness * 2, ContentMinSize),  Max(Config::Roundness * 2, titlebarHeight() + ContentMinSize) };
 				}
 			}
 
@@ -192,16 +571,7 @@ namespace SasaGUI
 				return reinterpret_cast<ControlType&>(nextStatefulControlImpl(id, generator));
 			}
 
-			void draw() const;
-
 		private:
-
-			struct WindowLayout
-			{
-				Rect titlebarRect;
-
-				Rect contentRect;
-			};
 
 			String m_id;
 
@@ -211,11 +581,13 @@ namespace SasaGUI
 
 			WindowState m_state = WindowState::Default;
 
-			bool m_mouseOver = false;
+			bool m_isContentHovered = false;
 
 			bool m_firstFrame = true;
 
 			Optional<WindowLayout> m_layout;
+
+			std::array<ScrollBar, 2> m_scrollBars;
 
 			Rect m_contentLocalRect{ 0, 0 };
 
@@ -223,11 +595,21 @@ namespace SasaGUI
 
 			std::map<size_t, std::shared_ptr<IControl>> m_savedControls;
 
+			void draw() const;
+
+			void updateWindowState();
+
+			void handleMovingState();
+
+			void handleResizingState();
+
+			void updateLayout();
+
+			void autoResize();
+
 			IControl& nextControlImpl(std::shared_ptr<IControl> control);
 
 			IControl& nextStatefulControlImpl(size_t id, ControlGenerator generator);
-
-			void updateLayout();
 		};
 	}
 
@@ -365,6 +747,7 @@ namespace SasaGUI
 	void InputContext::frameBegin()
 	{
 		m_cursorPos = Cursor::PosF();
+
 		if (not m_captured)
 		{
 			m_hoveredItemId = 0;
@@ -378,6 +761,10 @@ namespace SasaGUI
 			.displayName = String{ name },
 			.rect = { 0, 0, Config::DefaultWindowSize }
 		})
+		, m_scrollBars({
+			ScrollBar{Orientation::Horizontal},
+			ScrollBar{Orientation::Vertical}
+		})
 		, m_controls()
 		, m_input(&input)
 		, m_id(id)
@@ -390,79 +777,35 @@ namespace SasaGUI
 	{
 		m_input = &input;
 
-		Rect newRect = rect();
-		if (auto cursor = input.getCursorPos(*this))
-		{
-			switch (m_state)
-			{
-			case SasaGUI::WindowState::Default:
-				if (m_layout->titlebarRect.contains(*cursor))
-				{
-					input.hover(*this);
-					if (MouseL.down())
-					{
-						m_state = WindowState::Moving;
-						window.requestMoveToFront = true;
-						input.capture(*this);
-					}
-				}
-				if (m_layout->contentRect.contains(*cursor))
-				{
-					input.hover(*this);
-					if (MouseL.down())
-					{
-						window.requestMoveToFront = true;
-					}
-				}
-				break;
-			case SasaGUI::WindowState::Moving:
-				if (MouseL.pressed())
-				{
-					newRect.pos += Cursor::Delta();
-				}
-				else
-				{
-					m_state = WindowState::Default;
-					input.capture(*this, false);
-				}
-				break;
-			case SasaGUI::WindowState::Resizing:
-				break;
-			}
-		}
-		window.rect = newRect;
+		updateWindowState();
+		handleMovingState();
+		handleResizingState();
 		updateLayout();
+
+		for (auto& scrollBar : m_scrollBars)
+		{
+			scrollBar.update(input.getCursorPos(*this).map([this](Vec2 v) { return v.movedBy(-m_layout->clientRect.pos); }));
+		}
 
 		window.defined = false;
 		window.lineRect = { window.padding, window.padding, 0, 0 };
-		m_contentLocalRect.size = { 0, 0 };
+		m_contentLocalRect = {
+			-static_cast<int32>(m_scrollBars[0].value()),
+			-static_cast<int32>(m_scrollBars[1].value()),
+			0, 0
+		};
 		m_controls.clear();
 		window.sameLine = false;
 	}
 
 	void WindowImpl::frameEnd()
 	{
-		Rect newRect = rect();
 		if (not m_controls.empty())
 		{
 			m_contentLocalRect.size += { window.padding, window.padding };
 		}
-		if (window.flags & WindowFlag::AutoResize ||
-			m_firstFrame)
-		{
-			newRect.size = { 0, 0 };
-			if (not (window.flags & WindowFlag::NoBackground) &&
-				not (window.flags & WindowFlag::NoTitlebar))
-			{
-				newRect.h += titlebarHeight();
-			}
-			newRect.size += m_contentLocalRect.size;
 
-			Size min = minSize();
-			newRect.w = Max(newRect.w, min.x);
-			newRect.h = Max(newRect.h, min.y);
-		}
-		window.rect = newRect;
+		autoResize();
 		updateLayout();
 		draw();
 
@@ -488,10 +831,20 @@ namespace SasaGUI
 		}
 
 		{
-			ScopedViewport2D _{ m_layout->contentRect };
-			for (auto& control : m_controls)
+			ScopedViewport2D sv{ m_layout->clientRect };
 			{
-				control->draw();
+				Transformer2D t{ Mat3x2::Translate(m_contentLocalRect.pos), Transformer2D::Target::SetLocal };
+				for (auto& control : m_controls)
+				{
+					control->draw();
+				}
+			}
+			{
+				Transformer2D t{ Mat3x2::Identity(), Transformer2D::Target::SetLocal };
+				for (auto& scrollBar : m_scrollBars)
+				{
+					scrollBar.draw();
+				}
 			}
 		}
 	}
@@ -532,10 +885,9 @@ namespace SasaGUI
 		if (auto globalCursorPos = m_input->getCursorPos(*this))
 		{
 			if (m_state == WindowState::Default &&
-				m_layout.has_value() &&
-				m_layout->contentRect.contains(*globalCursorPos))
+				m_isContentHovered)
 			{
-				localCursorPos = globalCursorPos->movedBy(-m_layout->contentRect.pos);
+				localCursorPos = globalCursorPos->movedBy(-m_layout->contentRect.pos - m_contentLocalRect.pos);
 			}
 		}
 		control->update(localRect, localCursorPos);
@@ -560,6 +912,93 @@ namespace SasaGUI
 		return nextControlImpl(itr->second);
 	}
 
+	void WindowImpl::updateWindowState()
+	{
+		m_isContentHovered = false;
+
+		Rect& windowRect = window.rect;
+		if (auto cursor = m_input->getCursorPos(*this))
+		{
+			if (rect().contains(*cursor))
+			{
+				m_input->hover(*this);
+				window.requestMoveToFront |= MouseL.down();
+			}
+
+			switch (m_state)
+			{
+			case SasaGUI::WindowState::Default:
+
+				if (m_layout->titlebarRect.contains(*cursor))
+				{
+					if (MouseL.down())
+					{
+						m_state = WindowState::Moving;
+						m_input->capture(*this, true);
+					}
+					break;
+				}
+
+				if (m_layout->contentRect.contains(*cursor))
+				{
+					m_scrollBars[0].scroll(Mouse::WheelH() * window.font.height());
+					m_scrollBars[1].scroll(Mouse::Wheel() * window.font.height());
+				}
+
+				if (m_scrollBars[0].rect().contains(*cursor))
+				{
+					if (MouseL.down())
+					{
+						m_state = WindowState::Scrolling;
+						m_input->capture(*this, true);
+					}
+					break;
+				}
+
+				if (m_scrollBars[0].rect().contains(*cursor))
+				{
+					if (MouseL.down())
+					{
+						m_state = WindowState::Scrolling;
+						m_input->capture(*this, true);
+					}
+					break;
+				}
+
+				m_isContentHovered = m_layout->contentRect.contains(*cursor);
+
+				break;
+			case SasaGUI::WindowState::Moving:
+			case SasaGUI::WindowState::Resizing:
+			case SasaGUI::WindowState::Scrolling:
+				if (not MouseL.pressed())
+				{
+					m_state = WindowState::Default;
+					m_input->capture(*this, false);
+				}
+				break;
+			}
+		}
+	}
+
+	void WindowImpl::handleMovingState()
+	{
+		if (m_state != WindowState::Moving)
+		{
+			return;
+		}
+
+		window.rect.pos += Cursor::Delta();
+	}
+
+	void WindowImpl::handleResizingState()
+	{
+		if (m_state != WindowState::Resizing)
+		{
+			return;
+		}
+	}
+
 	void WindowImpl::updateLayout()
 	{
 		if (window.flags & WindowFlag::NoBackground ||
@@ -567,24 +1006,117 @@ namespace SasaGUI
 		{
 			m_layout = WindowLayout{
 				.titlebarRect = { 0, 0, 0, 0 },
+				.clientRect = window.rect,
 				.contentRect = window.rect
 			};
 		}
 		else
 		{
+			Rect client{
+				window.rect.x,
+				window.rect.y + titlebarHeight(),
+				window.rect.w,
+				window.rect.h - titlebarHeight()
+			};
 			m_layout = WindowLayout{
 				.titlebarRect = {
 					window.rect.pos,
 					window.rect.w,
 					titlebarHeight()
 				},
-				.contentRect = {
-					window.rect.x,
-					window.rect.y + titlebarHeight(),
-					window.rect.w,
-					window.rect.h - titlebarHeight()
-				}
+				.clientRect = client,
+				.contentRect = client
 			};
+		}
+
+		//スクロールバー
+
+		if (window.flags & WindowFlag::NoScrollbar)
+		{
+			return;
+		}
+
+		bool hbar = m_contentLocalRect.w > m_layout->contentRect.w;
+		bool vbar = m_contentLocalRect.h > m_layout->contentRect.h;
+
+		// バーの表示によってコントロールが隠れるときはスクロールバーを表示
+		if (hbar)
+		{
+			vbar |= m_contentLocalRect.h > m_layout->contentRect.h - ScrollBar::Thickness;
+		}
+		if (vbar)
+		{
+			hbar |= m_contentLocalRect.w > m_layout->contentRect.w - ScrollBar::Thickness;
+		}
+
+		// バーの大きさとコントロールが表示できる領域を決定
+		if (hbar && not vbar)
+		{
+			m_scrollBars[0].updateLayout({
+				0,
+				m_layout->clientRect.h - ScrollBar::Thickness,
+				m_layout->clientRect.w,
+				ScrollBar::Thickness
+			});
+			m_layout->contentRect.h -= m_scrollBars[0].rect().h;
+		}
+		else if (not hbar && vbar)
+		{
+			m_scrollBars[1].updateLayout({
+				m_layout->clientRect.w - ScrollBar::Thickness,
+				0,
+				ScrollBar::Thickness,
+				m_layout->clientRect.h
+			});
+			m_layout->contentRect.w -= m_scrollBars[1].rect().w;
+		}
+		else if (hbar && vbar)
+		{
+			m_scrollBars[0].updateLayout({
+				0,
+				m_layout->clientRect.h - ScrollBar::Thickness,
+				m_layout->clientRect.w - ScrollBar::Thickness,
+				ScrollBar::Thickness
+			});
+			m_scrollBars[1].updateLayout({
+				m_layout->clientRect.w - ScrollBar::Thickness,
+				0,
+				ScrollBar::Thickness,
+				m_layout->clientRect.h - ScrollBar::Thickness
+			});
+			m_layout->contentRect.h -= m_scrollBars[0].rect().h;
+			m_layout->contentRect.w -= m_scrollBars[1].rect().w;
+		}
+
+		if (hbar && vbar)
+		{
+			m_scrollBars[0].updateConstraints(0.0, m_contentLocalRect.w + ScrollBar::Thickness, m_layout->contentRect.w);
+			m_scrollBars[1].updateConstraints(0.0, m_contentLocalRect.h + ScrollBar::Thickness, m_layout->contentRect.h);
+		}
+		else
+		{
+			m_scrollBars[0].updateConstraints(0.0, m_contentLocalRect.w, m_layout->contentRect.w);
+			m_scrollBars[1].updateConstraints(0.0, m_contentLocalRect.h, m_layout->contentRect.h);
+		}
+	}
+
+	void WindowImpl::autoResize()
+	{
+		Size& windowSize = window.rect.size;
+		if (window.flags & WindowFlag::AutoResize/* ||
+			m_firstFrame*/)
+		{
+			windowSize = { 0, 0 };
+			if (not (window.flags & WindowFlag::NoBackground) &&
+				not (window.flags & WindowFlag::NoTitlebar))
+			{
+				windowSize.y += titlebarHeight();
+			}
+			windowSize += m_contentLocalRect.size;
+
+			Size min = minSize();
+			windowSize.x = Max(windowSize.x, min.x);
+			windowSize.y = Max(windowSize.y, min.y);
 		}
 	}
 
