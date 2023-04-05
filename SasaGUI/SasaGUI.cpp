@@ -353,7 +353,7 @@ namespace SasaGUI
 			m_minimum = minimum;
 			m_maximum = maximum;
 			m_viewportSize = viewportSize;
-			m_value = Clamp(m_value, m_minimum, m_maximum - m_viewportSize);
+			m_value = Max(Min(m_value, m_maximum - m_viewportSize), m_minimum);
 		}
 
 		void show()
@@ -372,7 +372,7 @@ namespace SasaGUI
 			{
 				m_scrollVelocity = 0.0;
 			}
-			m_scrollTarget = Clamp(m_value + delta, m_minimum, m_maximum - m_viewportSize);
+			m_scrollTarget = Max(Min(m_value + delta, m_maximum - m_viewportSize), m_minimum);
 		}
 
 		void moveTo(double value)
@@ -495,6 +495,11 @@ namespace SasaGUI
 
 		RectF getThumbRect() const
 		{
+			if (m_maximum - m_minimum <= 0.0)
+			{
+				return { 0, 0, 0, 0 };
+			}
+
 			double length = m_viewportSize / (m_maximum - m_minimum);
 			double pos = m_value / (m_maximum - m_minimum);
 
