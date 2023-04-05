@@ -105,6 +105,7 @@ namespace SasaGUI
 
 			constexpr static int32 FrameThickness = 0;
 			constexpr static int32 Height = 16;
+			constexpr static double Speed = 2;
 		};
 	}
 
@@ -2300,13 +2301,15 @@ namespace SasaGUI
 
 		void init(double value, int32 width) 
 		{
-			m_value = Clamp(value, 0.0, 1.0);
+			m_targetValue = Clamp(value, 0.0, 1.0);
 			m_width = Max(Config::Height, width);
 		}
 
 	private:
 
-		double m_value;
+		double m_targetValue;
+
+		double m_value = 0;
 
 		int32 m_width;
 
@@ -2320,6 +2323,15 @@ namespace SasaGUI
 		void update(Rect rect, Optional<Vec2>) override
 		{
 			m_rect = rect;
+
+			if (m_targetValue < m_value)
+			{
+				m_value = Max(m_targetValue, m_value - Scene::DeltaTime() * Config::Speed);
+			}
+			else
+			{
+				m_value = Min(m_targetValue, m_value + Scene::DeltaTime() * Config::Speed);
+			}
 		}
 
 		void draw() const override

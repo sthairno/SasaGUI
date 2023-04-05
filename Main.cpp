@@ -7,10 +7,12 @@ void Main()
 
 	SasaGUI::GUIManager gui;
 
+	Stopwatch repeatStw(StartImmediately::Yes);
 	size_t counter = 0;
 	Texture texture(Emoji{ U"🎍" });
 	bool checked = false;
 	int score = 0;
+	double barValue = 0;
 	HSV color = Palette::Red;
 	double value = 0;
 
@@ -18,7 +20,13 @@ void Main()
 	{
 		ClearPrint();
 		gui.frameBegin();
-		
+
+		if (repeatStw.elapsed() > 1s)
+		{
+			barValue = RandomClosed(0.0, 1.0);
+			repeatStw.restart();
+		}
+
 		gui.label(U"Label:"); gui.sameLine(); gui.label(U"test", HSV{ Periodic::Sawtooth0_1(3s) * 360 });
 		gui.label(U"Image:"); gui.sameLine(); gui.image(texture);
 		gui.label(U"CheckBox:"); gui.sameLine(); gui.checkbox(checked, U"HogeHoge");
@@ -36,8 +44,7 @@ void Main()
 			}
 		}
 		gui.label(U"ProgressBar:");
-		gui.progressbar(Periodic::Sine0_1(10s));
-
+		gui.progressbar(barValue);
 		gui.label(U"Button:"); gui.sameLine();
 		if (gui.button(U"Click here"))
 		{
