@@ -124,13 +124,13 @@ namespace SasaGUI
 
 		size_t hoveredItemId() const { return m_hoveredItemId; }
 
-		bool hover(WindowImpl& window);
+		bool hover(const WindowImpl& window);
 
-		bool capture(WindowImpl& window, bool capture = true);
+		bool capture(const WindowImpl& window, bool capture = true);
 
-		Optional<Vec2> getCursorPos();
+		Optional<Vec2> getCursorPos() const;
 
-		Optional<Vec2> getCursorPos(WindowImpl& window);
+		Optional<Vec2> getCursorPos(const WindowImpl& window) const;
 
 	private:
 
@@ -574,6 +574,8 @@ namespace SasaGUI
 				}
 			}
 
+			Optional<Vec2> getLocalCursorPos() const;
+
 			void frameBegin(InputContext& input);
 
 			void frameEnd();
@@ -734,7 +736,7 @@ namespace SasaGUI
 
 	// InputContext
 
-	bool InputContext::hover(WindowImpl& window)
+	bool InputContext::hover(const WindowImpl& window)
 	{
 		if (m_hoveredItemId == 0)
 		{
@@ -750,7 +752,7 @@ namespace SasaGUI
 		return false;
 	}
 
-	bool InputContext::capture(WindowImpl& window, bool capture)
+	bool InputContext::capture(const WindowImpl& window, bool capture)
 	{
 		if (m_hoveredItemId == 0 ||
 			m_hoveredItemId == window.randomId())
@@ -770,7 +772,7 @@ namespace SasaGUI
 		return false;
 	}
 
-	Optional<Vec2> InputContext::getCursorPos()
+	Optional<Vec2> InputContext::getCursorPos() const
 	{
 		if (m_hoveredItemId == 0)
 		{
@@ -780,7 +782,7 @@ namespace SasaGUI
 		return none;
 	}
 
-	Optional<Vec2> InputContext::getCursorPos(WindowImpl& window)
+	Optional<Vec2> InputContext::getCursorPos(const WindowImpl& window) const
 	{
 		if (m_hoveredItemId == 0 ||
 			m_hoveredItemId == window.randomId())
@@ -824,6 +826,18 @@ namespace SasaGUI
 		, m_randomId(RandomUint64())
 	{
 		updateLayout();
+	}
+
+	Optional<Vec2> WindowImpl::getLocalCursorPos() const
+	{
+		if (auto globalCursorPos = m_input->getCursorPos(*this))
+		{
+			if (m_state == WindowState::Default &&
+				m_isContentHovered)
+			{
+				return globalCursorPos->movedBy(-m_layout->contentRect.pos - m_contentLocalRect.pos);
+			}
+		}
 	}
 
 	void WindowImpl::frameBegin(InputContext& input)
