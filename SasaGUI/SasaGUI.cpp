@@ -308,7 +308,7 @@ namespace SasaGUI
 		using Config = Config::ScrollBar;
 
 		constexpr static int32 Thickness = Config::TrackMargin * 2 + Config::ThumbThickness;
-		constexpr static int32 MinLength = Config::TrackMargin * 2 + Config::ThumbMinLength;
+		constexpr static int32 MinLength = Config::TrackMargin * 2 + Config::ThumbMinLength + 10;
 		constexpr static double ThumbRoundness = Config::ThumbThickness * 0.5;
 
 		ScrollBar(Orientation orientation)
@@ -339,13 +339,15 @@ namespace SasaGUI
 			case Orientation::Horizontal:
 				m_rect.w = Max(m_rect.w, MinLength);
 				m_rect.h = Thickness;
+				m_trackLength = m_rect.w - Config::TrackMargin * 2;
 				break;
 			case Orientation::Vertical:
 				m_rect.w = Thickness;
 				m_rect.h = Max(m_rect.h, MinLength);
+				m_trackLength = m_rect.h - Config::TrackMargin * 2;
 				break;
 			}
-			m_trackRect = m_rect.stretched(-Config::TrackMargin);
+			updateThumbLength();
 		}
 
 		void updateConstraints(double minimum, double maximum, double viewportSize)
@@ -353,7 +355,10 @@ namespace SasaGUI
 			m_minimum = minimum;
 			m_maximum = maximum;
 			m_viewportSize = viewportSize;
+
 			m_value = Max(Min(m_value, m_maximum - m_viewportSize), m_minimum);
+
+			updateThumbLength();
 		}
 
 		void show()
@@ -361,8 +366,16 @@ namespace SasaGUI
 			m_colorTransitionDelay.update(true);
 		}
 
-		void scroll(double delta)
+		void scroll(double delta, bool teleport = false)
 		{
+			if (teleport)
+			{
+				m_value = Max(Min(m_value + delta, m_maximum - m_viewportSize), m_minimum);
+				m_scrollTarget = m_value;
+				m_scrollVelocity = 0.0;
+				return;
+			}
+
 			if (delta == 0.0)
 			{
 				return;
@@ -382,53 +395,52 @@ namespace SasaGUI
 			m_scrollVelocity = 0.0;
 		}
 
-		void update(Optional<Vec2> cursorPos = Cursor::PosF(), double deltaTime = Scene::DeltaTime())
+		void update(Optional<Vec2> cursorXYPos = Cursor::PosF(), double deltaTime = Scene::DeltaTime())
 		{
-			bool rectHovered = false;
-			Optional<double> hoveredPos;
-			RectF thumbRect = getThumbRect();
+			Optional<double> cursorPos = cursorXYPos.map([this](Vec2 v) { return getMainAxisValue(v); });
+			double cursorDelta = prevCursorPos && cursorPos
+				? *cursorPos - *prevCursorPos
+				: 0.0;
+			bool mouseOver = cursorPos && m_rect.contains(*cursorXYPos);
+			auto thumbRect = getThumbRect();
+			auto trackRect = getTrackRect();
 
-			if (not MouseL.pressed())
+			if (m_thumbLength == 0.0 || not MouseL.pressed())
 			{
 				m_thumbGrabbed = false;
 				m_trackPressed = false;
 			}
-
-			if (cursorPos.has_value())
+			else if (cursorXYPos.has_value() && MouseL.down())
 			{
-				rectHovered = m_rect.contains(*cursorPos);
-				hoveredPos = getHoveredPos(*cursorPos);
-
-				if (MouseL.down() && thumbRect.area() > 0.0)
+				if (thumbRect.contains(*cursorXYPos))
 				{
-					if (thumbRect.contains(*cursorPos))
-					{
-						m_thumbGrabbed = true;
-					}
-					else if (rectHovered)
-					{
-						m_largeScrollDirection = Math::Sign(*hoveredPos - m_value);
-						m_largeScrollTarget = *hoveredPos;
-						m_trackPressed = true;
-					}
+					m_thumbGrabbed = true;
+				}
+				else if (getTrackRect().contains(*cursorXYPos))
+				{
+					m_trackPressed = true;
+					m_largeScrollDirection = Math::Sign(*cursorPos - getMainAxisValue(thumbRect.pos));
+					m_largeScrollTargetPos = *cursorPos;
 				}
 			}
 
-			if (m_thumbGrabbed && hoveredPos)
+			if (m_thumbGrabbed && cursorDelta != 0.0)
 			{
-				moveTo(*hoveredPos - m_viewportSize * 0.5);
+				scroll(cursorDelta * (m_maximum - m_minimum - m_viewportSize) / (m_trackLength - m_thumbLength), true);
 			}
 
 			if (m_largeScrollTimer.update(m_trackPressed, deltaTime))
 			{
 				scroll(m_largeScrollDirection * m_viewportSize);
-				if (m_value <= m_largeScrollTarget &&
-					m_largeScrollTarget <= m_value + m_viewportSize)
+
+				double thumbPos = calculateThumbPos(m_scrollTarget);
+				if (thumbPos <= m_largeScrollTargetPos &&
+					m_largeScrollTargetPos <= thumbPos + m_thumbLength)
 				{
 					m_trackPressed = false;
 				}
-				if (m_value <= m_minimum ||
-					m_maximum - m_viewportSize <= m_value)
+				if (m_scrollTarget <= m_minimum ||
+					m_maximum - m_viewportSize <= m_scrollTarget)
 				{
 					m_trackPressed = false;
 				}
@@ -436,32 +448,34 @@ namespace SasaGUI
 
 			m_value = Math::SmoothDamp(m_value, m_scrollTarget, m_scrollVelocity, Config::ScrollSmoothTime.count());
 
-			bool show = (rectHovered || m_thumbGrabbed || m_trackPressed) && thumbRect.area() > 0.0;
+			bool show = (mouseOver || m_thumbGrabbed || m_trackPressed) && m_thumbLength != 0.0;
 			m_colorTransition.update(m_colorTransitionDelay.update(show, deltaTime), deltaTime);
+
+			prevCursorPos = cursorPos;
 		}
 
 		void draw() const
 		{
-			RectF thumbRect = getThumbRect();
-
 			double f = m_colorTransition.value();
 			ColorF backColor = Config::BackgroundColor.lerp(Config::HoveredBackgroundColor, f);
 			ColorF trackColor = Config::TrackColor.lerp(Config::HoveredTrackColor, f);
 			ColorF thumbColor = Config::ThumbColor.lerp(Config::HoveredThumbColor, f);
 			m_rect
 				.draw(backColor);
-			m_trackRect
+			getTrackRect()
 				.rounded(ThumbRoundness)
 				.draw(trackColor);
-			if (thumbRect.area() > 0.0)
+			if (m_thumbLength != 0.0)
 			{
-				thumbRect
+				getThumbRect()
 					.rounded(ThumbRoundness)
 					.draw(thumbColor);
 			}
 		}
 
 	private:
+
+		// 制限&スクロール位置
 
 		double m_minimum = 0.0;
 
@@ -471,13 +485,21 @@ namespace SasaGUI
 
 		double m_viewportSize = 1.0;
 
+		// レイアウト
+
 		Rect m_rect;
 
-		Rect m_trackRect;
+		double m_trackLength;
+
+		double m_thumbLength = 0.0; // 表示しないとき0
+
+		// 状態
 
 		bool m_thumbGrabbed = false;
 
 		bool m_trackPressed = false;
+
+		// スクロール状態
 
 		double m_scrollTarget = 0.0;
 
@@ -485,7 +507,9 @@ namespace SasaGUI
 
 		int32 m_largeScrollDirection = 0;
 
-		double m_largeScrollTarget = 0.0;
+		double m_largeScrollTargetPos = 0.0;
+
+		// アニメーション関連
 
 		Repeat m_largeScrollTimer{ Config::LargeScrollInterval, Config::LargeScrollDelay };
 
@@ -493,60 +517,68 @@ namespace SasaGUI
 
 		Delay m_colorTransitionDelay{ Config::FadeOutDelay };
 
+		// その他
+
+		Optional<double> prevCursorPos;
+
+		void updateThumbLength()
+		{
+			double range = m_maximum - m_minimum;
+			if (range <= 0.0 ||
+				m_viewportSize >= range)
+			{
+				m_thumbLength = 0;
+			}
+			else
+			{
+				m_thumbLength = Max<double>(m_trackLength * m_viewportSize / range, Config::ThumbMinLength);
+			}
+		}
+
+		Rect getTrackRect() const { return m_rect.stretched(-Config::TrackMargin); }
+
+		inline double calculateThumbPos(double value) const
+		{
+			return (m_trackLength - m_thumbLength) * value / (m_maximum - m_minimum - m_viewportSize);
+		}
+
 		RectF getThumbRect() const
 		{
-			if (m_maximum - m_minimum <= 0.0)
-			{
-				return { 0, 0, 0, 0 };
-			}
-
-			double length = m_viewportSize / (m_maximum - m_minimum);
-			double pos = m_value / (m_maximum - m_minimum);
-
-			if (length >= 1.0)
-			{
-				return { 0, 0, 0, 0 };
-			}
+			Point trackPos = getTrackRect().pos;
+			double pos = calculateThumbPos(m_value);
 
 			switch (orientation)
 			{
 			case Orientation::Horizontal:
 				return {
-					m_trackRect.x + m_trackRect.w * pos,
-					m_trackRect.y,
-					m_trackRect.w * length,
-					m_trackRect.h
+					trackPos.x + pos,
+					trackPos.y,
+					m_thumbLength,
+					Config::ThumbThickness
 				};
 			case Orientation::Vertical:
 				return {
-					m_trackRect.x,
-					m_trackRect.y + m_trackRect.h * pos,
-					m_trackRect.w,
-					m_trackRect.h * length
+					trackPos.x,
+					trackPos.y + pos,
+					Config::ThumbThickness,
+					m_thumbLength
 				};
 			}
 		}
 
-		double getHoveredPos(Vec2 cursorPos) const
+		double getMainAxisValue(Vec2 input) const
 		{
-			double value = 0.0;
 			switch (orientation)
 			{
-			case Orientation::Horizontal:
-				value = (cursorPos.x - m_trackRect.x) / m_trackRect.w;
-				break;
-			case Orientation::Vertical:
-				value = (cursorPos.y - m_trackRect.y) / m_trackRect.h;
-				break;
+			case Orientation::Horizontal: return input.x;
+			case Orientation::Vertical: return input.y;
 			}
-			value *= m_maximum - m_minimum;
-			return value;
 		}
 	};
 
 	namespace detail
 	{
-		using ControlGenerator = std::function<IControl*()>;
+		using ControlGenerator = std::function<IControl* ()>;
 
 		template<class ControlType>
 		static ControlGenerator DefaultGenerator()
@@ -1979,7 +2011,7 @@ namespace SasaGUI
 
 		void update(Rect rect, Optional<Vec2> cursorPos) override
 		{
-			m_circle = { Arg::leftCenter = rect.leftCenter(), static_cast<RectF::size_type::value_type>(circleSize()) / 2};
+			m_circle = { Arg::leftCenter = rect.leftCenter(), static_cast<RectF::size_type::value_type>(circleSize()) / 2 };
 			m_labelLeftCenter = m_circle.right() + Vec2{ Config::CircleMargin, 0 };
 
 			m_hovered = cursorPos && rect.contains(*cursorPos);
@@ -2017,7 +2049,7 @@ namespace SasaGUI
 			if (selected)
 			{
 				Circle{ m_circle.center, m_circle.r * Config::InnerCircleScale }
-					.draw(frameColor);
+				.draw(frameColor);
 			}
 			labelText
 				.draw(Arg::leftCenter = m_labelLeftCenter, Config::LabelColor);
@@ -2168,10 +2200,10 @@ namespace SasaGUI
 				auto& firstTab = m_tabs.front();
 				auto& selectedTab = m_tabs[selectedIdx];
 				auto& lastTab = m_tabs.back();
-				Rect{ firstTab.globalRect.leftX() - Config::FrameThickness, firstTab.globalRect.bottomY(), selectedTab.localRect.leftX(), Config::FrameThickness}
-					.draw(Config::FrameColor);
+				Rect{ firstTab.globalRect.leftX() - Config::FrameThickness, firstTab.globalRect.bottomY(), selectedTab.localRect.leftX(), Config::FrameThickness }
+				.draw(Config::FrameColor);
 				Rect{ selectedTab.globalRect.br(), lastTab.localRect.rightX() - selectedTab.localRect.rightX() + Config::FrameThickness, Config::FrameThickness }
-					.draw(Config::FrameColor);
+				.draw(Config::FrameColor);
 			}
 			else
 			{
@@ -2237,7 +2269,7 @@ namespace SasaGUI
 			Mat3x2 cursorMat = m_cursorPos
 				? Mat3x2::Translate(Cursor::PosF() - *m_cursorPos)
 				: Mat3x2::Translate(Cursor::PosF() + Vec2{ 1, 1 });
-			const Transformer2D _{ Mat3x2::Identity(), cursorMat, Transformer2D::Target::PushLocal};
+			const Transformer2D _{ Mat3x2::Identity(), cursorMat, Transformer2D::Target::PushLocal };
 			m_valueChanged = SimpleGUI::ColorPicker(*ref, m_pos);
 		}
 	};
@@ -2317,7 +2349,7 @@ namespace SasaGUI
 
 		using Config = Config::ProgressBar;
 
-		void init(double value, int32 width) 
+		void init(double value, int32 width)
 		{
 			m_targetValue = Clamp(value, 0.0, 1.0);
 			m_width = Max(Config::Height, width);
@@ -2376,13 +2408,13 @@ namespace SasaGUI
 			{
 				// 欠けた円を描画
 				Circle{ m_rect.x + circleR, m_rect.y + circleR, circleR }
-					.drawSegment(270_deg, barWidth, Config::BarColor);
+				.drawSegment(270_deg, barWidth, Config::BarColor);
 			}
 			else
 			{
 				// 両端が丸い線を描画
 				RoundRect{ m_rect.pos, barWidth, Config::Height, circleR }
-					.draw(Config::BarColor);
+				.draw(Config::BarColor);
 			}
 		}
 	};
@@ -2451,7 +2483,7 @@ namespace SasaGUI
 			if (m_knobPos != 1.0)
 			{
 				RoundRect{ m_rect, m_rect.h * 0.5 }
-					.draw(Config::BackgroundColor);
+				.draw(Config::BackgroundColor);
 			}
 			if (m_knobPos != 0.0)
 			{
@@ -2461,7 +2493,7 @@ namespace SasaGUI
 
 			double knobX = m_rect.h * 0.5 + (m_rect.w - m_rect.h) * m_knobPos;
 			Circle{ m_rect.x + knobX, m_rect.centerY(), m_rect.h * 0.5 - Config::KnobMargin }
-				.draw(Config::KnobColor);
+			.draw(Config::KnobColor);
 		}
 	};
 
