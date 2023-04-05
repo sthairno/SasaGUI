@@ -155,7 +155,7 @@ namespace SasaGUI
 			return clicked;
 		}
 
-		size_t& tab(StringView id, Array<String> tabNames, size_t firstIdx = 0);
+		size_t& tab(StringView id, Array<String> tabNames);
 
 		// void dropdown();
 
@@ -183,7 +183,7 @@ namespace SasaGUI
 		detail::WindowImpl& getDefaultWindowImpl() { return *m_defaultWindow; }
 
 		detail::WindowImpl& getCurrentWindowImpl() { return *m_stack.back(); }
-
+		
 	public:
 
 		~GUIManager();

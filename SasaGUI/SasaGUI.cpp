@@ -527,13 +527,21 @@ namespace SasaGUI
 
 	namespace detail
 	{
+		using ControlGenerator = std::function<IControl*()>;
+
+		template<class ControlType>
+		static ControlGenerator DefaultGenerator()
+		{
+			return []() -> IControl* { return new ControlType(); };
+		}
+
 		class WindowImpl : Uncopyable
 		{
 		public:
 
 			using Config = Config::Window;
 
-			using ControlGenerator = std::function<std::shared_ptr<IControl>()>;
+			using ControlContainer = Array<std::shared_ptr<IControl>>;
 
 			constexpr static int32 ContentMinSize = ScrollBar::MinLength + ScrollBar::Thickness;
 
@@ -581,27 +589,33 @@ namespace SasaGUI
 			void frameEnd();
 
 			template<std::derived_from<IControl> ControlType>
-			inline ControlType& nextStatelessControl(std::shared_ptr<ControlType> control)
+			inline IControl& nextControl(const std::shared_ptr<ControlType>& control)
 			{
 				return reinterpret_cast<ControlType&>(nextControlImpl(control));
 			}
 
 			template<std::derived_from<IControl> ControlType>
-			inline ControlType& nextStatefulControl(size_t id)
+			inline ControlType& nextStatelessControl(ControlGenerator generator = DefaultGenerator<ControlType>())
 			{
-				s3d::detail::HashCombine(id, typeid(ControlType).hash_code());
-				return reinterpret_cast<ControlType&>(nextStatefulControlImpl(
-					id,
-					[]() ->std::shared_ptr<IControl> { return std::make_shared<ControlType>(); }
+				return reinterpret_cast<ControlType&>(nextStatelessControlImpl(
+					typeid(ControlType),
+					generator
 				));
 			}
 
 			template<std::derived_from<IControl> ControlType>
-			inline ControlType& nextStatefulControl(size_t id, ControlGenerator generator)
+			inline ControlType& nextStatefulControl(size_t id, ControlGenerator generator = DefaultGenerator<ControlType>())
 			{
 				s3d::detail::HashCombine(id, typeid(ControlType).hash_code());
-				return reinterpret_cast<ControlType&>(nextStatefulControlImpl(id, generator));
+				return reinterpret_cast<ControlType&>(nextStatefulControlImpl(
+					id,
+					generator
+				));
 			}
+
+			void updateControl(IControl& control);
+
+			Rect pushRect(Size size);
 
 		private:
 
@@ -625,9 +639,11 @@ namespace SasaGUI
 
 			Rect m_contentLocalRect{ 0, 0 };
 
-			Array<std::shared_ptr<IControl>> m_controls;
+			ControlContainer m_controls;
 
 			std::map<size_t, std::shared_ptr<IControl>> m_savedControls;
+
+			size_t m_nextControlIdx = 0;
 
 			void draw() const;
 
@@ -641,9 +657,11 @@ namespace SasaGUI
 
 			void autoResize();
 
-			IControl& nextControlImpl(std::shared_ptr<IControl> control);
+			IControl& nextControlImpl(const std::shared_ptr<IControl>& control);
 
-			IControl& nextStatefulControlImpl(size_t id, ControlGenerator generator);
+			IControl& nextStatelessControlImpl(const std::type_info& type, ControlGenerator& generator);
+
+			IControl& nextStatefulControlImpl(size_t id, ControlGenerator& generator);
 		};
 	}
 
@@ -861,12 +879,13 @@ namespace SasaGUI
 			-static_cast<int32>(m_scrollBars[1].value()),
 			0, 0
 		};
-		m_controls.clear();
+		m_nextControlIdx = 0;
 		window.sameLine = false;
 	}
 
 	void WindowImpl::frameEnd()
 	{
+		m_controls.resize(m_nextControlIdx);
 		if (not m_controls.empty())
 		{
 			m_contentLocalRect.size += { window.padding, window.padding };
@@ -920,67 +939,70 @@ namespace SasaGUI
 		}
 	}
 
-	IControl& WindowImpl::nextControlImpl(std::shared_ptr<IControl> control)
+	IControl& WindowImpl::nextControlImpl(const std::shared_ptr<IControl>& control)
 	{
-		m_controls.emplace_back(control);
-
-		Rect localRect{ 0, 0, control->computeSize() };
-		if (window.sameLine)
+		if (m_nextControlIdx < m_controls.size())
 		{
-			localRect.pos = window.lineRect.tr();
-			localRect.x += window.space;
+			m_controls[m_nextControlIdx] = control;
 		}
 		else
 		{
-			Point newLinePos = window.lineRect.bl();
-			if (window.lineRect.area() > 0.0)
-			{
-				newLinePos.y += window.space;
-			}
-
-			localRect.pos = newLinePos;
-
-			window.lineRect = { newLinePos, 0, 0 };
+			m_controls.push_back(control);
 		}
-		window.sameLine = false;
-
-		{
-			Point br = localRect.br();
-			m_contentLocalRect.w = Max(m_contentLocalRect.w, br.x);
-			m_contentLocalRect.h = Max(m_contentLocalRect.h, br.y);
-			window.lineRect.w = Max(window.lineRect.w, br.x - window.lineRect.x);
-			window.lineRect.h = Max(window.lineRect.h, br.y - window.lineRect.y);
-		}
-
-		Optional<Vec2> localCursorPos;
-		if (auto globalCursorPos = m_input->getCursorPos(*this))
-		{
-			if (m_state == WindowState::Default &&
-				m_isContentHovered)
-			{
-				localCursorPos = globalCursorPos->movedBy(-m_layout->contentRect.pos - m_contentLocalRect.pos);
-			}
-		}
-		control->update(localRect, localCursorPos);
+		m_nextControlIdx++;
 
 		return *control;
 	}
 
-	IControl& WindowImpl::nextStatefulControlImpl(size_t id, ControlGenerator generator)
+	IControl& WindowImpl::nextStatelessControlImpl(const std::type_info& type, ControlGenerator& generator)
+	{
+		if (m_nextControlIdx < m_controls.size() &&
+			typeid(*m_controls[m_nextControlIdx]) != type)
+		{
+			m_controls.resize(m_nextControlIdx);
+		}
+
+		if (m_nextControlIdx >= m_controls.size())
+		{
+			m_controls.emplace_back(std::shared_ptr<IControl>(generator()));
+			Console << U"[+Control] " << Unicode::FromUTF8(type.name());
+		}
+
+		auto& control = m_controls[m_nextControlIdx];
+
+		m_nextControlIdx++;
+
+		return *control;
+	}
+
+	IControl& WindowImpl::nextStatefulControlImpl(size_t id, ControlGenerator& generator)
 	{
 		s3d::detail::HashCombine(id, m_randomId);
 
-		auto itr = m_savedControls.find(id);
-		if (itr == m_savedControls.end())
+		auto controlItr = m_savedControls.find(id);
+		if (controlItr == m_savedControls.end())
 		{
 			auto [tmp, _] = m_savedControls.emplace(
 				id,
-				generator()
+				std::shared_ptr<IControl>(generator())
 			);
-			itr = tmp;
+			controlItr = tmp;
+			Console << U"[+Control] " << id;
 		}
 
-		return nextControlImpl(itr->second);
+		auto& control = controlItr->second;
+
+		if (m_nextControlIdx < m_controls.size())
+		{
+			m_controls[m_nextControlIdx] = control;
+		}
+		else
+		{
+			m_controls.push_back(control);
+		}
+		m_nextControlIdx++;
+
+		return *control;
 	}
 
 	void WindowImpl::updateWindowState()
@@ -1323,6 +1345,48 @@ namespace SasaGUI
 		}
 	}
 
+	void WindowImpl::updateControl(IControl& control)
+	{
+		Rect localRect = pushRect(control.computeSize());
+		Optional<Vec2> localCursorPos = getLocalCursorPos();
+
+		control.update(localRect, localCursorPos);
+	}
+
+	Rect WindowImpl::pushRect(Size size)
+	{
+		Rect localRect{ 0, 0, size };
+
+		// コントロールの位置を計算
+		if (window.sameLine)
+		{
+			localRect.pos = window.lineRect.tr();
+			localRect.x += window.space;
+		}
+		else
+		{
+			Point newLinePos = window.lineRect.bl();
+			if (window.lineRect.area() > 0.0)
+			{
+				newLinePos.y += window.space;
+			}
+
+			localRect.pos = newLinePos;
+
+			window.lineRect = { newLinePos, 0, 0 };
+		}
+		window.sameLine = false;
+
+		// m_contentLocalRectとwindow.lineRectの大きさを更新
+		Point br = localRect.br();
+		m_contentLocalRect.w = Max(m_contentLocalRect.w, br.x);
+		m_contentLocalRect.h = Max(m_contentLocalRect.h, br.y);
+		window.lineRect.w = Max(window.lineRect.w, br.x - window.lineRect.x);
+		window.lineRect.h = Max(window.lineRect.h, br.y - window.lineRect.y);
+
+		return localRect;
+	}
+
 	// Layer
 
 	void Layer::frameBegin(InputContext& input)
@@ -1532,19 +1596,15 @@ namespace SasaGUI
 	{
 	public:
 
-		Dummy(Size size)
-			: m_size(size)
-		{ }
+		Size size;
 
 	private:
-
-		Size m_size;
 
 		Rect m_rect;
 
 		Size computeSize() const override
 		{
-			return m_size;
+			return size;
 		}
 
 		void update(Rect rect, Optional<Vec2>) override
@@ -1560,8 +1620,12 @@ namespace SasaGUI
 
 	void GUIManager::dummy(Size size)
 	{
-		getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<Dummy>(size));
+		auto& window = getCurrentWindowImpl();
+
+		auto& dummy = window.nextStatelessControl<Dummy>();
+		dummy.size = size;
+
+		window.updateControl(dummy);
 	}
 
 	// Button
@@ -1570,9 +1634,7 @@ namespace SasaGUI
 	{
 	public:
 
-		Button(StringView label)
-			: m_label(label)
-		{ }
+		String label;
 
 		bool clicked() const
 		{
@@ -1580,8 +1642,6 @@ namespace SasaGUI
 		}
 
 	private:
-
-		String m_label;
 
 		Rect m_rect;
 
@@ -1591,7 +1651,7 @@ namespace SasaGUI
 
 		Size computeSize() const override
 		{
-			return SimpleGUI::ButtonRegion(m_label, { 0, 0 }).size.asPoint();
+			return SimpleGUI::ButtonRegion(label, { 0, 0 }).size.asPoint();
 		}
 
 		void update(Rect rect, Optional<Vec2> cursorPos) override
@@ -1609,14 +1669,18 @@ namespace SasaGUI
 				: Mat3x2::Translate(Cursor::PosF() + Vec2{ 1, 1 });
 			const Transformer2D _{ Mat3x2::Translate(m_rect.pos), cursorMat, Transformer2D::Target::PushLocal };
 			[[maybe_unused]]
-			bool unused = SimpleGUI::Button(m_label, { 0, 0 }, m_rect.w);
+			bool unused = SimpleGUI::Button(label, { 0, 0 }, m_rect.w);
 		}
 	};
 
 	bool GUIManager::button(StringView label)
 	{
-		auto& button = getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<Button>(label));
+		auto& window = getCurrentWindowImpl();
+
+		auto& button = window.nextStatelessControl<Button>();
+		button.label = label;
+
+		window.updateControl(button);
 		return button.clicked();
 	}
 
@@ -1624,11 +1688,6 @@ namespace SasaGUI
 
 	class SimpleTextBox : public IControl
 	{
-	public:
-
-		SimpleTextBox()
-		{ }
-
 	public:
 
 		double width = 200;
@@ -1674,10 +1733,13 @@ namespace SasaGUI
 
 	TextEditState& GUIManager::simpleTextBox(StringView id, double width, const Optional<size_t>& maxChars)
 	{
-		auto& textBox = getCurrentWindowImpl()
-			.nextStatefulControl<SimpleTextBox>(id.hash());
+		auto& window = getCurrentWindowImpl();
+
+		auto& textBox = window.nextStatefulControl<SimpleTextBox>(id.hash());
 		textBox.width = width;
 		textBox.maxChars = maxChars;
+
+		window.updateControl(textBox);
 		return textBox.state();
 	}
 
@@ -1687,22 +1749,17 @@ namespace SasaGUI
 	{
 	public:
 
-		Label(StringView text, ColorF color)
-			: m_text(SimpleGUI::GetFont()(text))
-			, m_color(color)
-		{ }
+		DrawableText text;
+
+		ColorF color;
 
 	private:
-
-		DrawableText m_text;
-
-		ColorF m_color;
 
 		Vec2 m_pos;
 
 		Size computeSize() const override
 		{
-			return m_text.region().size.asPoint();
+			return text.region().size.asPoint();
 		}
 
 		void update(Rect rect, Optional<Vec2>) override
@@ -1712,14 +1769,19 @@ namespace SasaGUI
 
 		void draw() const
 		{
-			m_text.draw(m_pos, m_color);
+			text.draw(m_pos, color);
 		}
 	};
 
 	void GUIManager::label(StringView text, ColorF color)
 	{
-		getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<Label>(text, color));
+		auto& window = getCurrentWindowImpl();
+		auto& label = window.nextStatelessControl<Label>();
+
+		label.text = window.window.font(text);
+		label.color = color;
+
+		window.updateControl(label);
 	}
 
 	// Image
@@ -1728,21 +1790,11 @@ namespace SasaGUI
 	{
 	public:
 
-		Image(const Texture& texture, ColorF diffuse)
-			: m_texture(texture)
-			, m_diffuse(diffuse)
-		{ }
+		std::variant<Texture, TextureRegion> texture;
 
-		Image(const TextureRegion& texture, ColorF diffuse)
-			: m_texture(texture)
-			, m_diffuse(diffuse)
-		{ }
+		ColorF diffuse;
 
 	private:
-
-		const std::variant<Texture, TextureRegion> m_texture;
-
-		ColorF m_diffuse;
 
 		Vec2 m_pos;
 
@@ -1750,7 +1802,7 @@ namespace SasaGUI
 		{
 			return std::visit([](const auto& tex) {
 				return tex.region(0.0, 0.0).size.asPoint();
-			}, m_texture);
+			}, texture);
 		}
 
 		void update(Rect rect, Optional<Vec2>) override
@@ -1761,21 +1813,31 @@ namespace SasaGUI
 		void draw() const
 		{
 			std::visit([this](const auto& tex) {
-				tex.draw(m_pos, m_diffuse);
-			}, m_texture);
+				tex.draw(m_pos, diffuse);
+			}, texture);
 		}
 	};
 
 	void GUIManager::image(Texture texture, ColorF diffuse)
 	{
-		getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<Image>(texture, diffuse));
+		auto& window = getCurrentWindowImpl();
+		auto& image = window.nextStatelessControl<Image>();
+
+		image.texture = texture;
+		image.diffuse = diffuse;
+
+		window.updateControl(image);
 	}
 
 	void GUIManager::image(TextureRegion texture, ColorF diffuse)
 	{
-		getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<Image>(texture, diffuse));
+		auto& window = getCurrentWindowImpl();
+		auto& image = window.nextStatelessControl<Image>();
+
+		image.texture = texture;
+		image.diffuse = diffuse;
+
+		window.updateControl(image);
 	}
 
 	// CheckBox
@@ -1786,18 +1848,13 @@ namespace SasaGUI
 
 		using Config = Config::CheckBox;
 
-		CheckBox(bool& value, StringView label)
-			: m_ref(&value)
-			, m_labelText(SimpleGUI::GetFont()(label))
-		{ }
+		bool* ref;
+
+		DrawableText labelText;
 
 		bool valueChanged() const { return m_valueChanged; }
 
 	private:
-
-		bool* m_ref;
-
-		DrawableText m_labelText;
 
 		bool m_value = false;
 
@@ -1809,7 +1866,7 @@ namespace SasaGUI
 
 		Size computeSize() const override
 		{
-			Size labelSize = m_labelText.region().size.asPoint();
+			Size labelSize = labelText.region().size.asPoint();
 			return { labelSize.x + checkboxSize(), labelSize.y };
 		}
 
@@ -1823,11 +1880,11 @@ namespace SasaGUI
 			{
 				Cursor::RequestStyle(CursorStyle::Hand);
 				m_valueChanged = MouseL.down();
-				*m_ref ^= m_valueChanged;
+				*ref ^= m_valueChanged;
 			}
 
-			m_value = *m_ref;
-			m_ref = nullptr;
+			m_value = *ref;
+			ref = nullptr;
 		}
 
 		void draw() const override
@@ -1839,13 +1896,13 @@ namespace SasaGUI
 				int32 size = checkboxSize();
 				drawCheckLine(m_checkRect.center(), checkboxSize() * Config::CheckLineScale);
 			}
-			m_labelText
+			labelText
 				.draw(Arg::leftCenter = m_labelLeftCenter, Palette::Black);
 		}
 
 		int32 checkboxSize() const
 		{
-			return static_cast<int32>(m_labelText.font.height() * Config::BoxScale);
+			return static_cast<int32>(labelText.font.height() * Config::BoxScale);
 		}
 
 		void drawCheckLine(Vec2 center, double scale) const
@@ -1861,8 +1918,13 @@ namespace SasaGUI
 
 	bool GUIManager::checkbox(bool& checked, StringView label)
 	{
-		auto& checkbox = getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<CheckBox>(checked, label));
+		auto& window = getCurrentWindowImpl();
+		auto& checkbox = window.nextStatelessControl<CheckBox>();
+
+		checkbox.ref = &checked;
+		checkbox.labelText = window.window.font(label);
+
+		window.updateControl(checkbox);
 		return checkbox.valueChanged();
 	}
 
@@ -1874,20 +1936,15 @@ namespace SasaGUI
 
 		using Config = Config::RadioButton;
 
-		RadioButton(bool selected, StringView label)
-			: m_selected(selected)
-			, m_labelText(SimpleGUI::GetFont()(label))
-		{ }
+		bool selected;
+
+		DrawableText labelText;
 
 		bool clicked() const { return m_clicked; }
 
 	private:
 
-		bool m_selected;
-
 		bool m_hovered;
-
-		DrawableText m_labelText;
 
 		bool m_clicked = false;
 
@@ -1897,7 +1954,7 @@ namespace SasaGUI
 
 		Size computeSize() const override
 		{
-			Size labelSize = m_labelText.region().size.asPoint();
+			Size labelSize = labelText.region().size.asPoint();
 			return { labelSize.x + circleSize() + Config::CircleMargin, labelSize.y };
 		}
 
@@ -1908,7 +1965,7 @@ namespace SasaGUI
 
 			m_hovered = cursorPos && rect.contains(*cursorPos);
 			m_clicked = m_hovered && MouseL.down();
-			m_selected |= m_clicked;
+			selected |= m_clicked;
 
 			if (m_hovered)
 			{
@@ -1919,7 +1976,7 @@ namespace SasaGUI
 		void draw() const override
 		{
 			ColorF color, frameColor;
-			if (m_selected)
+			if (selected)
 			{
 				color = Config::CheckedCircleColor;
 				frameColor = Config::CheckedFrameColor;
@@ -1938,25 +1995,30 @@ namespace SasaGUI
 			m_circle
 				.draw(color)
 				.drawFrame(Config::CircleFrameThickness, frameColor);
-			if (m_selected)
+			if (selected)
 			{
 				Circle{ m_circle.center, m_circle.r * Config::InnerCircleScale }
 					.draw(frameColor);
 			}
-			m_labelText
+			labelText
 				.draw(Arg::leftCenter = m_labelLeftCenter, Config::LabelColor);
 		}
 
 		int32 circleSize() const
 		{
-			return static_cast<int32>(m_labelText.font.height() * Config::CircleScale);
+			return static_cast<int32>(labelText.font.height() * Config::CircleScale);
 		}
 	};
 
 	bool GUIManager::radiobutton(bool selected, StringView label)
 	{
-		auto& radioButton = getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<RadioButton>(selected, label));
+		auto& window = getCurrentWindowImpl();
+		auto& radioButton = window.nextStatelessControl<RadioButton>();
+
+		radioButton.selected = selected;
+		radioButton.labelText = window.window.font(label);
+
+		window.updateControl(radioButton);
 		return radioButton.clicked();
 	}
 
@@ -1968,11 +2030,14 @@ namespace SasaGUI
 
 		using Config = Config::Tab;
 
-		Tab(const Array<String>& tabNames, size_t firstIdx)
-			: m_tabs(Arg::reserve = tabNames.size())
-			, selectedIdx(firstIdx)
+		size_t selectedIdx = 0;
+
+		void init(const Array<String>& tabNames)
 		{
 			assert(tabNames);
+
+			m_tabs.clear();
+			m_tabs.reserve(tabNames.size());
 
 			int32 tabHeight = 0;
 			Point tabPos = { Config::FrameThickness, Config::FrameThickness };
@@ -1999,8 +2064,6 @@ namespace SasaGUI
 				tab.localRect.h = tabHeight;
 			}
 		}
-
-		size_t selectedIdx = 0;
 
 	private:
 
@@ -2107,16 +2170,15 @@ namespace SasaGUI
 		}
 	};
 
-	size_t& GUIManager::tab(StringView id, Array<String> tabNames, size_t firstIdx)
+	size_t& GUIManager::tab(StringView id, Array<String> tabNames)
 	{
 		assert(tabNames);
-		auto& tab = getCurrentWindowImpl()
-			.nextStatefulControl<Tab>(
-				id.hash(),
-				[&]() -> std::shared_ptr<IControl> {
-					return std::make_shared<Tab>(tabNames, firstIdx);
-				}
-			);
+		auto& window = getCurrentWindowImpl();
+		auto& tab = window.nextStatefulControl<Tab>(id.hash());
+
+		tab.init(tabNames);
+
+		window.updateControl(tab);
 		return tab.selectedIdx;
 	}
 
@@ -2126,15 +2188,11 @@ namespace SasaGUI
 	{
 	public:
 
-		SimpleColorPicker(HSV& ref)
-			: m_ref(ref)
-		{ }
+		HSV* ref;
 
 		bool valueChanged() const { return m_valueChanged; }
 
 	private:
-
-		HSV& m_ref;
 
 		mutable bool m_valueChanged = false;
 
@@ -2161,14 +2219,18 @@ namespace SasaGUI
 				? Mat3x2::Translate(Cursor::PosF() - *m_cursorPos)
 				: Mat3x2::Translate(Cursor::PosF() + Vec2{ 1, 1 });
 			const Transformer2D _{ Mat3x2::Identity(), cursorMat, Transformer2D::Target::PushLocal};
-			m_valueChanged = SimpleGUI::ColorPicker(m_ref, m_pos);
+			m_valueChanged = SimpleGUI::ColorPicker(*ref, m_pos);
 		}
 	};
 
 	bool GUIManager::simpleColorpicker(HSV& value)
 	{
-		auto& picker = getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<SimpleColorPicker>(value));
+		auto& window = getCurrentWindowImpl();
+		auto& picker = window.nextStatelessControl<SimpleColorPicker>();
+
+		picker.ref = &value;
+
+		window.updateControl(picker);
 		return picker.valueChanged();
 	}
 
@@ -2178,18 +2240,13 @@ namespace SasaGUI
 	{
 	public:
 
-		SimpleSlider(double& ref, double width)
-			: m_ref(ref)
-			, m_width(width)
-		{ }
+		double* ref;
+
+		double width;
 
 		bool valueChanged() const { return m_valueChanged; }
 
 	private:
-
-		double& m_ref;
-
-		double m_width;
 
 		mutable bool m_valueChanged = false;
 
@@ -2199,7 +2256,7 @@ namespace SasaGUI
 
 		Size computeSize() const override
 		{
-			return SimpleGUI::SliderRegion({ 0, 0 }, 0, m_width).size.asPoint();
+			return SimpleGUI::SliderRegion({ 0, 0 }, 0, width).size.asPoint();
 		}
 
 		void update(Rect rect, Optional<Vec2> cursorPos) override
@@ -2217,14 +2274,19 @@ namespace SasaGUI
 				: Mat3x2::Translate(Cursor::PosF() + Vec2{ 1, 1 });
 			const Transformer2D _{ Mat3x2::Identity(), cursorMat, Transformer2D::Target::PushLocal };
 
-			m_valueChanged = SimpleGUI::Slider(m_ref, m_pos, m_width);
+			m_valueChanged = SimpleGUI::Slider(*ref, m_pos, width);
 		}
 	};
 
 	bool GUIManager::simpleSlider(double& value, double width)
 	{
-		auto& slider = getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<SimpleSlider>(value, width));
+		auto& window = getCurrentWindowImpl();
+		auto& slider = window.nextStatelessControl<SimpleSlider>();
+
+		slider.ref = &value;
+		slider.width = width;
+
+		window.updateControl(slider);
 		return slider.valueChanged();
 	}
 
@@ -2236,10 +2298,11 @@ namespace SasaGUI
 
 		using Config = Config::ProgressBar;
 
-		ProgressBar(double value, int32 width)
-			: m_value(Clamp(value, 0.0, 1.0))
-			, m_width(Max(Config::Height, width))
-		{ }
+		void init(double value, int32 width) 
+		{
+			m_value = Clamp(value, 0.0, 1.0);
+			m_width = Max(Config::Height, width);
+		}
 
 	private:
 
@@ -2296,14 +2359,18 @@ namespace SasaGUI
 
 	void GUIManager::progressbar(double value, int32 width)
 	{
-		getCurrentWindowImpl()
-			.nextStatelessControl(std::make_shared<ProgressBar>(value, width));
+		auto& window = getCurrentWindowImpl();
+		auto& bar = window.nextStatelessControl<ProgressBar>();
+
+		bar.init(value, width);
+
+		window.updateControl(bar);
 	}
 
 	// Custom
 
 	void GUIManager::custom(std::shared_ptr<IControl> control)
 	{
-		getCurrentWindowImpl().nextStatelessControl(control);
+		getCurrentWindowImpl().nextControl(control);
 	}
 }
