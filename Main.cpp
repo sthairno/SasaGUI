@@ -15,6 +15,7 @@ void Main()
 	double barValue = 0;
 	HSV color = Palette::Red;
 	double value = 0;
+	bool toggleSwitchValue = false;
 
 	while (System::Update())
 	{
@@ -58,6 +59,8 @@ void Main()
 		gui.simpleColorpicker(color);
 		gui.label(U"SimpleSlider:");
 		gui.simpleSlider(value);
+		gui.label(U"ToggleSwitch:"); gui.sameLine();
+		gui.toggleSwitch(toggleSwitchValue);
 		
 		gui.windowBegin(U"Demo3");
 		gui.dummy({ 60, 80 }); gui.sameLine(); gui.dummy({ 100, 100 });

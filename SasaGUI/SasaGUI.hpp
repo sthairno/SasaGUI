@@ -170,6 +170,8 @@ namespace SasaGUI
 
 		void progressbar(double value, int32 width = 200);
 
+		bool toggleSwitch(bool& value);
+
 		void custom(std::shared_ptr<IControl> control);
 
 	private:

@@ -107,6 +107,18 @@ namespace SasaGUI
 			constexpr static int32 Height = 8;
 			constexpr static double Speed = 2;
 		};
+
+		struct ToggleSwitch
+		{
+			constexpr static ColorF BackgroundColor{ 0.9 };
+			constexpr static ColorF ActiveColor = Color{ 3, 121, 255 };
+			constexpr static ColorF KnobColor = Palette::White;
+
+			constexpr static int32 Width = 60;
+			constexpr static int32 Height = 30;
+			constexpr static int32 KnobMargin = 2;
+			constexpr static double KnobAnimationSpeed = 8;
+		};
 	}
 
 	class Layer;
@@ -2377,6 +2389,88 @@ namespace SasaGUI
 		bar.init(value, width);
 
 		window.updateControl(bar);
+	}
+
+	// ToggleSwitch
+
+	class ToggleSwitch : public IControl
+	{
+	public:
+
+		using Config = Config::ToggleSwitch;
+
+		bool value;
+
+		bool valueChanged() const { return m_valueChanged; }
+
+	private:
+
+		int32 m_width;
+
+		Rect m_rect;
+
+		double m_knobPos = 0;
+
+		bool m_mouseOver = false;
+
+		bool m_valueChanged = false;
+
+		Size computeSize() const override
+		{
+			return { Config::Width, Config::Height };
+		}
+
+		void update(Rect rect, Optional<Vec2> cursorPos) override
+		{
+			m_rect = rect;
+
+			m_mouseOver = cursorPos && rect.contains(*cursorPos);
+			m_valueChanged = m_mouseOver && MouseL.down();
+			value ^= m_valueChanged;
+
+			if (value)
+			{
+				m_knobPos = Min(1.0, m_knobPos + Scene::DeltaTime() * Config::KnobAnimationSpeed);
+			}
+			else
+			{
+				m_knobPos = Max(0.0, m_knobPos - Scene::DeltaTime() * Config::KnobAnimationSpeed);
+			}
+		}
+
+		void draw() const override
+		{
+			const ColorF backColor = Config::BackgroundColor.lerp(Config::ActiveColor, m_knobPos);
+
+			if (m_knobPos != 1.0)
+			{
+				RoundRect{ m_rect, m_rect.h * 0.5 }
+					.draw(Config::BackgroundColor);
+			}
+			if (m_knobPos != 0.0)
+			{
+				RoundRect{ m_rect.pos, m_rect.h + (m_rect.w - m_rect.h) * m_knobPos, m_rect.h, m_rect.h * 0.5 }
+				.draw(backColor);
+			}
+
+			double knobX = m_rect.h * 0.5 + (m_rect.w - m_rect.h) * m_knobPos;
+			Circle{ m_rect.x + knobX, m_rect.centerY(), m_rect.h * 0.5 - Config::KnobMargin }
+				.draw(Config::KnobColor);
+		}
+	};
+
+	bool GUIManager::toggleSwitch(bool& value)
+	{
+		auto& window = getCurrentWindowImpl();
+		auto& sw = window.nextStatelessControl<ToggleSwitch>();
+
+		sw.value = value;
+
+		window.updateControl(sw);
+
+		value = sw.value;
+
+		return sw.valueChanged();
 	}
 
 	// Custom
