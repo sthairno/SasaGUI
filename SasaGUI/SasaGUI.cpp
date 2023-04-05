@@ -99,12 +99,12 @@ namespace SasaGUI
 
 		struct ProgressBar
 		{
-			constexpr static ColorF BackgroundColor{ 0.8 };
-			constexpr static ColorF BarColor = Color{ 13, 110, 253 };
+			constexpr static ColorF BackgroundColor{ 0.9 };
+			constexpr static ColorF BarColor = Color{ 3, 121, 255 };
 			constexpr static ColorF FrameColor = Color::Zero();
 
 			constexpr static int32 FrameThickness = 0;
-			constexpr static int32 Height = 16;
+			constexpr static int32 Height = 8;
 			constexpr static double Speed = 2;
 		};
 	}
