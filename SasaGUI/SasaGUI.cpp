@@ -50,6 +50,7 @@ namespace SasaGUI
 			constexpr static int32 Roundness = 3;
 			constexpr static int32 FrameThickness = 2;
 			constexpr static int32 ResizeGripSize = 5;
+			constexpr static double ScrollSpeed = 2;
 		};
 
 		struct CheckBox
@@ -1069,8 +1070,8 @@ namespace SasaGUI
 
 				if (m_layout->contentRect.contains(*cursor))
 				{
-					m_scrollBars[0].scroll(Mouse::WheelH() * window.font.height());
-					m_scrollBars[1].scroll(Mouse::Wheel() * window.font.height());
+					m_scrollBars[0].scroll(Mouse::WheelH() * window.font.height() * Config::ScrollSpeed);
+					m_scrollBars[1].scroll(Mouse::Wheel() * window.font.height() * Config::ScrollSpeed);
 				}
 
 				if (m_scrollBars[0].rect().contains(*cursor))
