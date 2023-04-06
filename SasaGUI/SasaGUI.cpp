@@ -668,7 +668,16 @@ namespace SasaGUI
 
 			Rect pushRect(Size size);
 
+			void setPos(Vec2 pos, Vec2 offset);
+
 		private:
+
+			struct NextPosition
+			{
+				Vec2 pos;
+
+				Vec2 offset;
+			};
 
 			String m_id;
 
@@ -696,6 +705,8 @@ namespace SasaGUI
 
 			size_t m_nextControlIdx = 0;
 
+			Optional<NextPosition> m_nextPos;
+
 			void draw() const;
 
 			void updateWindowState();
@@ -707,6 +718,8 @@ namespace SasaGUI
 			void updateLayout();
 
 			void autoResize();
+
+			void updatePosition();
 
 			IControl& nextControlImpl(const std::shared_ptr<IControl>& control);
 
@@ -932,6 +945,7 @@ namespace SasaGUI
 		};
 		m_nextControlIdx = 0;
 		window.sameLine = false;
+		m_nextPos = none;
 	}
 
 	void WindowImpl::frameEnd()
@@ -943,6 +957,7 @@ namespace SasaGUI
 		}
 
 		autoResize();
+		updatePosition();
 		updateLayout();
 		draw();
 		if (m_resizeFlag != ResizeFlag::None)
@@ -1438,6 +1453,22 @@ namespace SasaGUI
 		return localRect;
 	}
 
+	void WindowImpl::setPos(Vec2 pos, Vec2 offset)
+	{
+		m_nextPos = NextPosition{
+			pos, offset
+		};
+	}
+
+	void WindowImpl::updatePosition()
+	{
+		if (m_nextPos)
+		{
+			window.rect.pos = (m_nextPos->pos - window.rect.size * m_nextPos->offset).asPoint();
+		}
+		m_nextPos = none;
+	}
+
 	// Layer
 
 	void Layer::frameBegin(InputContext& input)
@@ -1587,6 +1618,7 @@ namespace SasaGUI
 
 	void GUIManager::frameEnd()
 	{
+		m_defaultWindow->setPos({ 0, 0 }, { 0, 0 });
 		m_impl->frameEnd();
 
 		//for (auto [idx, layer] : Indexed(m_impl->layers()))
@@ -1636,6 +1668,11 @@ namespace SasaGUI
 	void GUIManager::sameLine()
 	{
 		getCurrentWindowImpl().window.sameLine = true;
+	}
+
+	void GUIManager::setWindowPos(Vec2 pos, Vec2 offset)
+	{
+		getCurrentWindowImpl().setPos(pos, offset);
 	}
 
 	GUIManager::~GUIManager()

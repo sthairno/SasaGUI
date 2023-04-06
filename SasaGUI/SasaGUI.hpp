@@ -120,6 +120,26 @@ namespace SasaGUI
 
 		void windowEnd();
 
+		inline void setWindowPos(Point pos) { setWindowPos(pos, { 0.0, 0.0 }); }
+
+		inline void setWindowPos(Arg::topLeft_<Vec2> topLeft) { setWindowPos(*topLeft, { 0.0, 0.0 }); }
+
+		inline void setWindowPos(Arg::topCenter_<Vec2> topCenter) { setWindowPos(*topCenter, { 0.5, 0.0 }); }
+
+		inline void setWindowPos(Arg::topRight_<Vec2> topRight) { setWindowPos(*topRight, { 1.0, 0.0 }); }
+
+		inline void setWindowPos(Arg::leftCenter_<Vec2> leftCenter) { setWindowPos(*leftCenter, { 0.0, 0.5 }); }
+
+		inline void setWindowPos(Arg::center_<Vec2> center) { setWindowPos(*center, { 0.5, 0.5 }); }
+
+		inline void setWindowPos(Arg::rightCenter_<Vec2> rightCenter) { setWindowPos(*rightCenter, { 1.0, 0.5 }); }
+
+		inline void setWindowPos(Arg::bottomLeft_<Vec2> bottomLeft) { setWindowPos(*bottomLeft, { 1.0, 1.0 }); }
+
+		inline void setWindowPos(Arg::bottomCenter_<Vec2> bottomCenter) { setWindowPos(*bottomCenter, { 0.5, 1.0 }); }
+
+		inline void setWindowPos(Arg::bottomRight_<Vec2> bottomRight) { setWindowPos(*bottomRight, { 0.0, 1.0 }); }
+
 		const Window& getDefaultWindow() const;
 
 		const Window& getCurrentWindow() const;
@@ -185,7 +205,9 @@ namespace SasaGUI
 		detail::WindowImpl& getDefaultWindowImpl() { return *m_defaultWindow; }
 
 		detail::WindowImpl& getCurrentWindowImpl() { return *m_stack.back(); }
-		
+
+		void setWindowPos(Vec2 pos, Vec2 offset);
+
 	public:
 
 		~GUIManager();

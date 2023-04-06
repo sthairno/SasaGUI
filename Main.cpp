@@ -62,9 +62,14 @@ void Main()
 		gui.label(U"ToggleSwitch:"); gui.sameLine();
 		gui.toggleSwitch(toggleSwitchValue);
 		
-		gui.windowBegin(U"Demo3");
-		gui.dummy({ 60, 80 }); gui.sameLine(); gui.dummy({ 100, 100 });
-		gui.dummy({ 100, 100 });
+		gui.windowBegin(U"CenterWindow", SasaGUI::WindowFlag::NoTitlebar | SasaGUI::WindowFlag::AutoResize);
+		gui.setWindowPos(Arg::center = Scene::CenterF());
+		gui.label(U"Center");
+		gui.windowEnd();
+
+		gui.windowBegin(U"TopRightWindow", SasaGUI::WindowFlag::NoTitlebar | SasaGUI::WindowFlag::AutoResize);
+		gui.setWindowPos(Arg::topRight = Scene::Rect().tr());
+		gui.label(U"TopRight");
 		gui.windowEnd();
 
 		gui.frameEnd();
