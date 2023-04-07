@@ -1671,40 +1671,10 @@ namespace SasaGUI
 
 	// Dummy
 
-	class Dummy : public IControl
-	{
-	public:
-
-		Size size;
-
-	private:
-
-		Rect m_rect;
-
-		Size computeSize() const override
-		{
-			return size;
-		}
-
-		void update(Rect rect, Optional<Vec2>) override
-		{
-			m_rect = rect;
-		}
-
-		void draw() const
-		{
-			m_rect.drawFrame(1, 0, Palette::Black);
-		}
-	};
-
 	void GUIManager::dummy(Size size)
 	{
-		auto& window = getCurrentWindowImpl();
-
-		auto& dummy = window.nextStatelessControl<Dummy>();
-		dummy.size = size;
-
-		window.updateControl(dummy);
+		getCurrentWindowImpl()
+			.pushRect(size);
 	}
 
 	// Button
