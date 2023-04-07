@@ -1,11 +1,22 @@
 ﻿#include <Siv3D.hpp> // OpenSiv3D v0.6.7
 #include "SasaGUI/SasaGUI.hpp"
 
+void TopRightWindow()
+{
+	auto& gui = SasaGUI::Get();
+
+	gui.windowBegin(U"TopRightWindow", SasaGUI::WindowFlag::NoTitlebar | SasaGUI::WindowFlag::AutoResize);
+	gui.setWindowPos(Arg::topRight = Scene::Rect().tr() + Vec2{ -10, 10 });
+	gui.label(U"TopRight");
+	gui.windowEnd();
+}
+
 void Main()
 {
 	Scene::SetBackground(ColorF{ 0.6, 0.8, 0.7 });
 
-	SasaGUI::GUIManager gui;
+	SasaGUI::RegisterAddon();
+	auto& gui = SasaGUI::Get();
 
 	Stopwatch repeatStw(StartImmediately::Yes);
 	size_t counter = 0;
@@ -20,7 +31,6 @@ void Main()
 	while (System::Update())
 	{
 		ClearPrint();
-		gui.frameBegin();
 
 		if (repeatStw.elapsed() > 1s)
 		{
@@ -61,17 +71,7 @@ void Main()
 		gui.simpleSlider(value);
 		gui.label(U"ToggleSwitch:"); gui.sameLine();
 		gui.toggleSwitch(toggleSwitchValue);
-		
-		gui.windowBegin(U"CenterWindow", SasaGUI::WindowFlag::NoTitlebar | SasaGUI::WindowFlag::AutoResize);
-		gui.setWindowPos(Arg::center = Scene::CenterF());
-		gui.label(U"Center");
-		gui.windowEnd();
 
-		gui.windowBegin(U"TopRightWindow", SasaGUI::WindowFlag::NoTitlebar | SasaGUI::WindowFlag::AutoResize);
-		gui.setWindowPos(Arg::topRight = Scene::Rect().tr());
-		gui.label(U"TopRight");
-		gui.windowEnd();
-
-		gui.frameEnd();
+		TopRightWindow();
 	}
 }

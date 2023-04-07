@@ -4,6 +4,8 @@ namespace SasaGUI
 {
 	namespace detail
 	{
+		static constexpr StringView DefaultAddonName = U"SasaGUI";
+
 		class WindowImpl;
 
 		class GUIImpl;
@@ -103,8 +105,6 @@ namespace SasaGUI
 	public:
 
 		GUIManager();
-
-		static GUIManager& FromAddon(StringView name);
 
 	public:
 
@@ -213,20 +213,19 @@ namespace SasaGUI
 		~GUIManager();
 	};
 
-	class GUIAddon : IAddon
+	bool RegisterAddon(const StringView name, int32 priority = 0);
+
+	bool RegisterAddon(const StringView name, int32 updatePriority, int32 drawPriority);
+
+	inline bool RegisterAddon(int32 priority = 0)
 	{
-	public:
+		return RegisterAddon(detail::DefaultAddonName, priority);
+	}
 
-		GUIManager gui;
+	inline bool RegisterAddon(int32 updatePriority, int32 drawPriority)
+	{
+		return RegisterAddon(detail::DefaultAddonName, updatePriority, drawPriority);
+	}
 
-	private:
-
-		bool init() override { return true; }
-
-		bool update() override { return true; }
-
-		void draw() const override {}
-
-		void postPresent() override {}
-	};
+	GUIManager& Get(const StringView name = detail::DefaultAddonName);
 }

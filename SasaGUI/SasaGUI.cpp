@@ -2554,4 +2554,43 @@ namespace SasaGUI
 	{
 		getCurrentWindowImpl().nextControl(control);
 	}
+
+	// Addon
+
+	class SasaGUIAddon : public IAddon
+	{
+	public:
+
+		mutable GUIManager gui;
+
+		bool update() override
+		{
+			gui.frameBegin();
+			return true;
+		}
+
+		void draw() const override
+		{
+			gui.frameEnd();
+		}
+	};
+
+	bool RegisterAddon(const StringView name, int32 priority)
+	{
+		return Addon::Register<SasaGUIAddon>(name, priority);
+	}
+
+	bool RegisterAddon(const StringView name, int32 updatePriority, int32 drawPriority)
+	{
+		return Addon::Register<SasaGUIAddon>(name, updatePriority, drawPriority);
+	}
+
+	GUIManager& Get(const StringView name)
+	{
+		if (auto addon = Addon::GetAddon<SasaGUIAddon>(name))
+		{
+			return addon->gui;
+		}
+		throw Error(U"SasaGUIAddon (name: " + name + U") is not registered");
+	}
 }
