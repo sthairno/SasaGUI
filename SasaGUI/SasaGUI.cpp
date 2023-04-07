@@ -1031,7 +1031,7 @@ namespace SasaGUI
 		if (m_nextControlIdx >= m_controls.size())
 		{
 			m_controls.emplace_back(std::shared_ptr<IControl>(generator()));
-			Console << U"[+Control] " << Unicode::FromUTF8(type.name());
+			// Console << U"[+Control] " << Unicode::FromUTF8(type.name());
 		}
 
 		auto& control = m_controls[m_nextControlIdx];
@@ -1053,7 +1053,7 @@ namespace SasaGUI
 				std::shared_ptr<IControl>(generator())
 			);
 			controlItr = tmp;
-			Console << U"[+Control] " << id;
+			// Console << U"[+Control] " << id;
 		}
 
 		auto& control = controlItr->second;
@@ -1527,7 +1527,7 @@ namespace SasaGUI
 		);
 		m_windowOrder.emplace_back(String{ id });
 
-		Console << U"[" << ToString(type) << U"][+] " << itr->first;
+		// Console << U"[" << ToString(type) << U"][+] " << itr->first;
 
 		return itr;
 	}
@@ -1549,7 +1549,7 @@ namespace SasaGUI
 
 			m_container.erase(itr);
 
-			Console << U"[" << ToString(type) << U"][-] " << id;
+			// Console << U"[" << ToString(type) << U"][-] " << id;
 			return true;
 		});
 	}
@@ -1592,15 +1592,6 @@ namespace SasaGUI
 			| WindowFlag::NoResize
 			| WindowFlag::NoMove
 			| WindowFlag::NoBackground;
-	}
-
-	GUIManager& GUIManager::FromAddon(StringView name)
-	{
-		if (auto addon = Addon::GetAddon<GUIAddon>(name))
-		{
-			return addon->gui;
-		}
-		throw Error(U"GUIAddon (name: " + name + U") is not registered");
 	}
 
 	void GUIManager::frameBegin()
