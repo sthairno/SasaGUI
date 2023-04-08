@@ -38,6 +38,9 @@ void Main()
 			repeatStw.restart();
 		}
 
+		gui.windowBegin(U"aaaaaaaaaaaaaaaa");
+		gui.windowEnd();
+
 		gui.label(U"Label:"); gui.sameLine(); gui.label(U"test", HSV{ Periodic::Sawtooth0_1(3s) * 360 });
 		gui.label(U"Image:"); gui.sameLine(); gui.image(texture);
 		gui.label(U"CheckBox:"); gui.sameLine(); gui.checkbox(checked, U"HogeHoge");

@@ -120,6 +120,8 @@ namespace SasaGUI
 
 		void windowEnd();
 
+		void setWindowSize(Size size);
+
 		inline void setWindowPos(Point pos) { setWindowPos(pos, { 0.0, 0.0 }); }
 
 		inline void setWindowPos(Arg::topLeft_<Vec2> topLeft) { setWindowPos(*topLeft, { 0.0, 0.0 }); }

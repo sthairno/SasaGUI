@@ -41,16 +41,17 @@ namespace SasaGUI
 
 		struct Window
 		{
-			constexpr static ColorF BackColor{ 0.9 };
-			constexpr static ColorF FrameColor{ 0.7 };
-			constexpr static ColorF TitlebarColor = Palette::Lightgray;
-			constexpr static ColorF TitlebarLabelColor = Common::LabelColor;
+			constexpr static ColorF BackColor{ 0.95 };
+			constexpr static ColorF FrameColor{ 0.6 };
+			constexpr static ColorF TitlebarTopColor{ 0.86 };
+			constexpr static ColorF TitlebarBottomColor{ 0.8 };
+			constexpr static ColorF TitlebarLabelColor{ 0.0 };
 
 			constexpr static Size DefaultWindowSize{ 100, 100 };
-			constexpr static int32 Roundness = 3;
-			constexpr static int32 FrameThickness = 2;
+			constexpr static int32 Roundness = 6;
+			constexpr static int32 FrameThickness = 1;
 			constexpr static int32 ResizeGripSize = 5;
-			constexpr static double ScrollSpeed = 2;
+			constexpr static double ScrollSpeed = 2.0;
 		};
 
 		struct CheckBox
@@ -670,6 +671,8 @@ namespace SasaGUI
 
 			void setPos(Vec2 pos, Vec2 offset);
 
+			void setSize(Size size);
+
 		private:
 
 			struct NextPosition
@@ -677,6 +680,11 @@ namespace SasaGUI
 				Vec2 pos;
 
 				Vec2 offset;
+			};
+
+			struct NextSize
+			{
+				Size size;
 			};
 
 			String m_id;
@@ -705,6 +713,8 @@ namespace SasaGUI
 
 			size_t m_nextControlIdx = 0;
 
+			Optional<NextSize> m_nextSize;
+
 			Optional<NextPosition> m_nextPos;
 
 			void draw() const;
@@ -717,7 +727,7 @@ namespace SasaGUI
 
 			void updateLayout();
 
-			void autoResize();
+			void updateSize();
 
 			void updatePosition();
 
@@ -945,7 +955,9 @@ namespace SasaGUI
 		};
 		m_nextControlIdx = 0;
 		window.sameLine = false;
+
 		m_nextPos = none;
+		m_nextSize = none;
 	}
 
 	void WindowImpl::frameEnd()
@@ -956,7 +968,7 @@ namespace SasaGUI
 			m_contentLocalRect.size += { window.padding, window.padding };
 		}
 
-		autoResize();
+		updateSize();
 		updatePosition();
 		updateLayout();
 		draw();
@@ -974,15 +986,30 @@ namespace SasaGUI
 		{
 			RoundRect{ window.rect, Config::Roundness }
 				.drawFrame(0, Config::FrameThickness, Config::FrameColor)
-				.draw(ColorF{ 0.9 });
+				.draw(Config::BackColor);
 
 			if (not (window.flags & WindowFlag::NoTitlebar))
 			{
-				m_layout->titlebarRect
+				auto& titleabarRect = m_layout->titlebarRect;
+				auto titlebarText = window.font(window.displayName);
+
+				// 背景
+				Rect{ titleabarRect.pos, titleabarRect.w, Config::Roundness }
 					.rounded(Config::Roundness, Config::Roundness, 0, 0)
-					.draw(Config::TitlebarColor);
-				window.font(window.displayName)
-					.draw(Arg::topCenter = window.rect.topCenter(), Config::TitlebarLabelColor);
+					.draw(Config::TitlebarTopColor);
+				titleabarRect
+					.stretched(-Config::Roundness, 0, 1, 0)
+					.draw(Arg::top = Config::TitlebarTopColor, Arg::bottom = Config::TitlebarBottomColor);
+				Rect{ titleabarRect.x, titleabarRect.bottomY() - Config::FrameThickness, titleabarRect.w, Config::FrameThickness }
+					.draw(Config::FrameColor);
+
+				// テキスト
+				RectF textRegion(
+					Arg::topCenter = titleabarRect.topCenter(),
+					Min(titlebarText.region().w, titleabarRect.w - Config::Roundness * 2.0),
+					titleabarRect.h
+				);
+				titlebarText.draw(textRegion, Config::TitlebarLabelColor);
 			}
 		}
 
@@ -1206,6 +1233,10 @@ namespace SasaGUI
 
 	void WindowImpl::updateLayout()
 	{
+		bool resizable =
+			not (window.flags & WindowFlag::NoResize) &&
+			not (window.flags & WindowFlag::AutoResize);
+
 		if (window.flags & WindowFlag::NoBackground ||
 			window.flags & WindowFlag::NoTitlebar)
 		{
@@ -1217,7 +1248,7 @@ namespace SasaGUI
 
 			// ResizeGrip
 
-			if (not (window.flags & WindowFlag::NoResize))
+			if (resizable)
 			{
 				// Top
 				m_layout->resizeGripRect[0] = {
@@ -1269,7 +1300,7 @@ namespace SasaGUI
 
 			// ResizeGrip
 
-			if (not (window.flags & WindowFlag::NoResize))
+			if (resizable)
 			{
 				// Top
 				m_layout->resizeGripRect[0] = {
@@ -1391,11 +1422,14 @@ namespace SasaGUI
 		}
 	}
 
-	void WindowImpl::autoResize()
+	void WindowImpl::updateSize()
 	{
 		Size& windowSize = window.rect.size;
-		if (window.flags & WindowFlag::AutoResize/* ||
-			m_firstFrame*/)
+		bool autoResize =
+			window.flags & WindowFlag::AutoResize ||
+			(m_firstFrame && m_nextSize.has_value());
+
+		if (autoResize)
 		{
 			windowSize = { 0, 0 };
 			if (not (window.flags & WindowFlag::NoBackground) &&
@@ -1409,6 +1443,21 @@ namespace SasaGUI
 			windowSize.x = Max(windowSize.x, min.x);
 			windowSize.y = Max(windowSize.y, min.y);
 		}
+		else if (m_nextSize)
+		{
+			Size min = minSize();
+			windowSize.x = Max(m_nextSize->size.x, min.x);
+			windowSize.y = Max(m_nextSize->size.y, min.y);
+	}
+	}
+
+	void WindowImpl::updatePosition()
+	{
+		if (m_nextPos)
+		{
+			window.rect.pos = (m_nextPos->pos - window.rect.size * m_nextPos->offset).asPoint();
+		}
+		m_nextPos = none;
 	}
 
 	void WindowImpl::updateControl(IControl& control)
@@ -1460,11 +1509,11 @@ namespace SasaGUI
 		};
 	}
 
-	void WindowImpl::updatePosition()
+	void WindowImpl::setSize(Size size)
 	{
-		if (m_nextPos)
-		{
-			window.rect.pos = (m_nextPos->pos - window.rect.size * m_nextPos->offset).asPoint();
+		m_nextSize = NextSize{
+			size
+		};
 		}
 		m_nextPos = none;
 	}
@@ -1498,6 +1547,7 @@ namespace SasaGUI
 
 	void Layer::frameEnd()
 	{
+		deleteUnusedWindow();
 		for (auto& id : m_windowOrder)
 		{
 			auto& window = *m_container.at(id);
@@ -1601,6 +1651,7 @@ namespace SasaGUI
 
 		m_impl->frameBegin();
 
+		// DefaultWindowの定義(延命)
 		m_defaultWindow = &m_impl
 			->getLayer(WindowLayer::Background)
 			.defineWindow(U"DefaultWindow");
@@ -1609,7 +1660,10 @@ namespace SasaGUI
 
 	void GUIManager::frameEnd()
 	{
+		// DefaultWindowの位置&座標を更新
 		m_defaultWindow->setPos({ 0, 0 }, { 0, 0 });
+		m_defaultWindow->setSize(Scene::Size());
+
 		m_impl->frameEnd();
 
 		//for (auto [idx, layer] : Indexed(m_impl->layers()))
@@ -1644,6 +1698,11 @@ namespace SasaGUI
 	void GUIManager::windowEnd()
 	{
 		m_stack.pop_back();
+	}
+
+	void GUIManager::setWindowSize(Size size)
+	{
+		getCurrentWindowImpl().setSize(size);
 	}
 
 	const Window& GUIManager::getDefaultWindow() const
