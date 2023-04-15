@@ -70,6 +70,8 @@ namespace SasaGUI
 
 		WindowFlag flags;
 
+		Font font;
+
 		Size maxSize{ std::numeric_limits<Size::value_type>::max(), std::numeric_limits<Size::value_type>::max() };
 
 		int32 space = 5;
@@ -82,9 +84,29 @@ namespace SasaGUI
 
 		bool requestMoveToFront = false;
 
-		Font font = SimpleGUI::GetFont();
-
 		bool sameLine = false;
+
+		bool hasTitlebar() const
+		{
+			return
+				not (flags & WindowFlag::NoBackground) &&
+				not (flags & WindowFlag::NoTitlebar);
+		}
+
+		bool isResizable() const
+		{
+			return
+				not (flags & WindowFlag::NoResize) &&
+				not (flags & WindowFlag::AutoResize);
+		}
+
+		bool isMovable() const
+		{
+			return
+				hasTitlebar() &&
+				not (flags & WindowFlag::NoMove) &&
+				not (flags & WindowFlag::AutoResize);
+		}
 	};
 
 	class IControl
@@ -108,6 +130,10 @@ namespace SasaGUI
 
 	public:
 
+		const Font& getFont() const;
+
+		void setFont(const Font& newFont);
+
 		// Frame
 
 		void frameBegin();
@@ -116,11 +142,29 @@ namespace SasaGUI
 
 		// Window
 
-		void windowBegin(StringView name, WindowFlag flags = WindowFlag::None);
+		template<class FuncType>
+		inline void window(const StringView name, FuncType&& func)
+		{
+			windowBegin(name);
+			func(*this);
+			windowEnd();
+		}
+
+		template<class FuncType>
+		inline void window(const StringView name, WindowFlag flags, FuncType&& func)
+		{
+			windowBegin(name, flags);
+			func(*this);
+			windowEnd();
+		}
+
+		void windowBegin(const StringView name, WindowFlag flags = WindowFlag::None);
 
 		void windowEnd();
 
 		void setWindowSize(Size size);
+
+		void setWindowDisplayName(const StringView name);
 
 		inline void setWindowPos(Point pos) { setWindowPos(pos, { 0.0, 0.0 }); }
 
@@ -152,22 +196,22 @@ namespace SasaGUI
 
 		void dummy(Size size);
 
-		bool button(StringView label);
+		bool button(const StringView label);
 
-		TextEditState& simpleTextBox(StringView id, double width = 200, const Optional<size_t>& maxChars = unspecified);
+		TextEditState& simpleTextBox(const StringView id, double width = 200, const Optional<size_t>& maxChars = unspecified);
 
-		void label(StringView text, ColorF color = Palette::Black);
+		void label(const StringView text, ColorF color = Palette::Black);
 
 		void image(Texture texture, ColorF diffuse = Palette::White);
 
 		void image(TextureRegion texture, ColorF diffuse = Palette::White);
 
-		bool checkbox(bool& checked, StringView label = U"");
+		bool checkbox(bool& checked, const StringView label = U"");
 
-		bool radiobutton(bool selected, StringView label = U"");
+		bool radiobutton(bool selected, const StringView label = U"");
 
 		template<class T, class U = T>
-		bool radiobutton(T& target, const U& value, StringView label = U"")
+		bool radiobutton(T& target, const U& value, const StringView label = U"")
 		{
 			bool clicked = radiobutton(target == value, label);
 			if (clicked)
@@ -177,7 +221,7 @@ namespace SasaGUI
 			return clicked;
 		}
 
-		size_t& tab(StringView id, Array<String> tabNames);
+		size_t& tab(const StringView id, Array<String> tabNames);
 
 		// void dropdown();
 

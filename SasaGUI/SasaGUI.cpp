@@ -86,10 +86,10 @@ namespace SasaGUI
 
 		struct Tab
 		{
-			constexpr static ColorF FrameColor = Palette::Black;
+			constexpr static ColorF FrameColor{ 0.5 };
 
-			constexpr static ColorF TabColor = ColorF{ 0.95 };
-			constexpr static ColorF HoveredTabColor = ColorF{ 0.8 };
+			constexpr static ColorF TabColor{ 0.8 };
+			constexpr static ColorF HoveredTabColor{ 0.86 };
 			constexpr static ColorF SelectedTabColor = ColorF::Zero();
 
 			constexpr static ColorF LabelColor = Common::LabelColor;
@@ -97,6 +97,7 @@ namespace SasaGUI
 			constexpr static int32 FrameThickness = 1;
 			constexpr static int32 TabR = 5;
 			constexpr static int32 TabSpace = 1;
+			constexpr static int32 TabMinWidth = 50;
 		};
 
 		struct ProgressBar
@@ -595,9 +596,7 @@ namespace SasaGUI
 
 			using ControlContainer = Array<std::shared_ptr<IControl>>;
 
-			constexpr static int32 ContentMinSize = ScrollBar::MinLength + ScrollBar::Thickness;
-
-			WindowImpl(InputContext& input, StringView id, StringView name);
+			WindowImpl(InputContext& input, const StringView id, const StringView name, const Font& font);
 
 		public:
 
@@ -611,14 +610,13 @@ namespace SasaGUI
 
 			int32 titlebarHeight() const
 			{
-				if (window.flags & WindowFlag::NoBackground ||
-					window.flags & WindowFlag::NoTitlebar)
+				if (window.hasTitlebar())
 				{
-					return 0;
+					return window.font.height();
 				}
 				else
 				{
-					return window.font.height();
+					return 0;
 				}
 			}
 
@@ -628,9 +626,22 @@ namespace SasaGUI
 				{
 					return { 0, 0 };
 				}
+				else if (
+					window.flags & WindowFlag::NoScrollbar ||
+					window.flags & WindowFlag::AutoResize)
+				{
+					return {
+						Config::Roundness * 2,
+						Max(Config::Roundness, titlebarHeight()) + Config::Roundness
+					};
+				}
 				else
 				{
-					return { Max(Config::Roundness * 2, ContentMinSize), Max(Config::Roundness * 2, titlebarHeight() + ContentMinSize) };
+					constexpr static int32 ContentMinSize = ScrollBar::MinLength + ScrollBar::Thickness;
+					return {
+						Max(Config::Roundness * 2, ContentMinSize),
+						Max(Config::Roundness * 2, titlebarHeight() + ContentMinSize)
+					};
 				}
 			}
 
@@ -705,7 +716,7 @@ namespace SasaGUI
 
 			std::array<ScrollBar, 2> m_scrollBars;
 
-			Rect m_contentLocalRect{ 0, 0 };
+			Rect m_contentLocalRect{ 0, 0, 0, 0 };
 
 			ControlContainer m_controls;
 
@@ -759,7 +770,7 @@ namespace SasaGUI
 
 		void frameEnd();
 
-		WindowImpl& defineWindow(StringView id);
+		WindowImpl& defineWindow(const StringView id, const StringView name, const Font& font);
 
 	private:
 
@@ -769,7 +780,7 @@ namespace SasaGUI
 
 		InputContext* m_input;
 
-		container_type::iterator createWindow(StringView id, StringView name);
+		container_type::iterator createWindow(const StringView id, const StringView name, const Font& font);
 
 		void deleteUnusedWindow();
 	};
@@ -780,6 +791,8 @@ namespace SasaGUI
 		{
 		public:
 
+			Font font = SimpleGUI::GetFont();
+
 			std::array<Layer, 3>& layers() { return m_layers; }
 
 			void frameBegin();
@@ -787,6 +800,8 @@ namespace SasaGUI
 			void frameEnd();
 
 			Layer& getLayer(WindowLayer layer);
+
+			WindowImpl& defineWindow(WindowLayer layer, const StringView id, const StringView name);
 
 		private:
 
@@ -903,10 +918,11 @@ namespace SasaGUI
 
 	// WindowImpl
 
-	WindowImpl::WindowImpl(InputContext& input, StringView id, StringView name)
+	WindowImpl::WindowImpl(InputContext& input, const StringView id, const StringView name, const Font& font)
 		: window({
 			.displayName = String{ name },
-			.rect = { 0, 0, Config::DefaultWindowSize }
+			.rect = { 0, 0, Config::DefaultWindowSize },
+			.font = font
 		})
 		, m_scrollBars({
 			ScrollBar{Orientation::Horizontal},
@@ -1127,7 +1143,7 @@ namespace SasaGUI
 				}
 				if (m_resizeFlag != ResizeFlag::None)
 				{
-					if (MouseL.down())
+					if (window.isResizable() && MouseL.down())
 					{
 						m_state = WindowState::Resizing;
 						window.requestMoveToFront = true;
@@ -1139,7 +1155,7 @@ namespace SasaGUI
 
 				if (m_layout->titlebarRect.contains(*cursor))
 				{
-					if (MouseL.down())
+					if (window.isMovable() && MouseL.down())
 					{
 						m_state = WindowState::Moving;
 						m_input->capture(*this, true);
@@ -1207,38 +1223,34 @@ namespace SasaGUI
 		}
 
 		auto delta = Cursor::Delta();
+		Size min = minSize();
 
 		if (m_resizeFlag & ResizeFlag::Left)
 		{
-			delta.x = Min(delta.x, window.rect.w - ContentMinSize);
+			delta.x = Min(delta.x, window.rect.w - min.x);
 			window.rect.x += delta.x;
 			window.rect.w -= delta.x;
 		}
 		else if (m_resizeFlag & ResizeFlag::Right)
 		{
-			window.rect.w = Max(window.rect.w + delta.x, ContentMinSize);
+			window.rect.w = Max(window.rect.w + delta.x, min.x);
 		}
 
 		if (m_resizeFlag & ResizeFlag::Top)
 		{
-			delta.y = Min(delta.y, window.rect.h - ContentMinSize - titlebarHeight());
+			delta.y = Min(delta.y, window.rect.h - min.y);
 			window.rect.y += delta.y;
 			window.rect.h -= delta.y;
 		}
 		else if (m_resizeFlag & ResizeFlag::Bottom)
 		{
-			window.rect.h = Max(window.rect.h + delta.y, ContentMinSize + titlebarHeight());
+			window.rect.h = Max(window.rect.h + delta.y, min.y);
 		}
 	}
 
 	void WindowImpl::updateLayout()
 	{
-		bool resizable =
-			not (window.flags & WindowFlag::NoResize) &&
-			not (window.flags & WindowFlag::AutoResize);
-
-		if (window.flags & WindowFlag::NoBackground ||
-			window.flags & WindowFlag::NoTitlebar)
+		if (not window.hasTitlebar())
 		{
 			m_layout = WindowLayout{
 				.titlebarRect = { 0, 0, 0, 0 },
@@ -1248,7 +1260,7 @@ namespace SasaGUI
 
 			// ResizeGrip
 
-			if (resizable)
+			if (window.isResizable())
 			{
 				// Top
 				m_layout->resizeGripRect[0] = {
@@ -1300,7 +1312,7 @@ namespace SasaGUI
 
 			// ResizeGrip
 
-			if (resizable)
+			if (window.isResizable())
 			{
 				// Top
 				m_layout->resizeGripRect[0] = {
@@ -1425,30 +1437,22 @@ namespace SasaGUI
 	void WindowImpl::updateSize()
 	{
 		Size& windowSize = window.rect.size;
-		bool autoResize =
-			window.flags & WindowFlag::AutoResize ||
-			(m_firstFrame && m_nextSize.has_value());
 
-		if (autoResize)
+		if (m_nextSize)
 		{
-			windowSize = { 0, 0 };
-			if (not (window.flags & WindowFlag::NoBackground) &&
-				not (window.flags & WindowFlag::NoTitlebar))
-			{
-				windowSize.y += titlebarHeight();
-			}
-			windowSize += m_contentLocalRect.size;
+			Size min = minSize();
+			windowSize.x = Max(m_nextSize->size.x, min.x);
+			windowSize.y = Max(m_nextSize->size.y, min.y);
+		}
+		else if (m_firstFrame || window.flags & WindowFlag::AutoResize)
+		{
+			windowSize = m_contentLocalRect.size;
+			windowSize.y += titlebarHeight();
 
 			Size min = minSize();
 			windowSize.x = Max(windowSize.x, min.x);
 			windowSize.y = Max(windowSize.y, min.y);
 		}
-		else if (m_nextSize)
-		{
-			Size min = minSize();
-			windowSize.x = Max(m_nextSize->size.x, min.x);
-			windowSize.y = Max(m_nextSize->size.y, min.y);
-	}
 	}
 
 	void WindowImpl::updatePosition()
@@ -1514,8 +1518,6 @@ namespace SasaGUI
 		m_nextSize = NextSize{
 			size
 		};
-		}
-		m_nextPos = none;
 	}
 
 	// Layer
@@ -1555,13 +1557,13 @@ namespace SasaGUI
 		}
 	}
 
-	WindowImpl& Layer::defineWindow(StringView id)
+	WindowImpl& Layer::defineWindow(const StringView id, const StringView name, const Font& font)
 	{
 		auto itr = m_container.find(id);
 
 		if (itr == m_container.end())
 		{
-			itr = createWindow(id, id);
+			itr = createWindow(id, name, font);
 		}
 
 		auto& impl = *itr->second;
@@ -1569,11 +1571,11 @@ namespace SasaGUI
 		return impl;
 	}
 
-	Layer::container_type::iterator Layer::createWindow(StringView id, StringView name)
+	Layer::container_type::iterator Layer::createWindow(const StringView id, const StringView name, const Font& font)
 	{
 		auto [itr, _] = m_container.emplace(
 				id,
-				std::make_unique<WindowImpl>(*m_input, id, name)
+				std::make_unique<WindowImpl>(*m_input, id, name, font)
 		);
 		m_windowOrder.emplace_back(String{ id });
 
@@ -1629,19 +1631,33 @@ namespace SasaGUI
 		return m_layers[static_cast<int32>(layer)];
 	}
 
+	WindowImpl& GUIImpl::defineWindow(WindowLayer layer, const StringView id, const StringView name)
+	{
+		return getLayer(layer).defineWindow(id, name, font);
+	}
+
 	// GUIManager
 
 	GUIManager::GUIManager()
 		: m_impl(std::make_unique<GUIImpl>())
 	{
 		m_defaultWindow = &m_impl
-			->getLayer(WindowLayer::Background)
-			.defineWindow(U"DefaultWindow");
+			->defineWindow(WindowLayer::Background, U"DefaultWindow", U"DefaultWindow");
 		m_defaultWindow->window.flags =
 			WindowFlag::NoTitlebar
 			| WindowFlag::NoResize
 			| WindowFlag::NoMove
 			| WindowFlag::NoBackground;
+	}
+
+	const Font& GUIManager::getFont() const
+	{
+		return m_impl->font;
+	}
+
+	void GUIManager::setFont(const Font& newFont)
+	{
+		m_impl->font = newFont;
 	}
 
 	void GUIManager::frameBegin()
@@ -1653,9 +1669,7 @@ namespace SasaGUI
 
 		// DefaultWindowの定義(延命)
 		m_defaultWindow = &m_impl
-			->getLayer(WindowLayer::Background)
-			.defineWindow(U"DefaultWindow");
-		m_defaultWindow->window.rect = Scene::Rect();
+			->defineWindow(WindowLayer::Background, U"DefaultWindow", U"DefaultWindow");
 	}
 
 	void GUIManager::frameEnd()
@@ -1683,14 +1697,13 @@ namespace SasaGUI
 		//}
 	}
 
-	void GUIManager::windowBegin(StringView name, WindowFlag flags)
+	void GUIManager::windowBegin(const StringView name, WindowFlag flags)
 	{
 		WindowLayer layer = flags & WindowFlag::AlwaysForeground
 			? WindowLayer::Foreground
 			: WindowLayer::Normal;
 		auto windowImpl = &m_impl
-			->getLayer(layer)
-			.defineWindow(name);
+			->defineWindow(layer, name, name);
 		windowImpl->window.flags = flags;
 		m_stack.push_back(windowImpl);
 	}
@@ -1703,6 +1716,11 @@ namespace SasaGUI
 	void GUIManager::setWindowSize(Size size)
 	{
 		getCurrentWindowImpl().setSize(size);
+	}
+
+	void GUIManager::setWindowDisplayName(const StringView name)
+	{
+		getCurrentWindowImpl().window.displayName = name;
 	}
 
 	const Window& GUIManager::getDefaultWindow() const
@@ -1839,7 +1857,7 @@ namespace SasaGUI
 		}
 	};
 
-	TextEditState& GUIManager::simpleTextBox(StringView id, double width, const Optional<size_t>& maxChars)
+	TextEditState& GUIManager::simpleTextBox(const StringView id, double width, const Optional<size_t>& maxChars)
 	{
 		auto& window = getCurrentWindowImpl();
 
@@ -1881,7 +1899,7 @@ namespace SasaGUI
 		}
 	};
 
-	void GUIManager::label(StringView text, ColorF color)
+	void GUIManager::label(const StringView text, ColorF color)
 	{
 		auto& window = getCurrentWindowImpl();
 		auto& label = window.nextStatelessControl<Label>();
@@ -2024,7 +2042,7 @@ namespace SasaGUI
 		}
 	};
 
-	bool GUIManager::checkbox(bool& checked, StringView label)
+	bool GUIManager::checkbox(bool& checked, const StringView label)
 	{
 		auto& window = getCurrentWindowImpl();
 		auto& checkbox = window.nextStatelessControl<CheckBox>();
@@ -2118,7 +2136,7 @@ namespace SasaGUI
 		}
 	};
 
-	bool GUIManager::radiobutton(bool selected, StringView label)
+	bool GUIManager::radiobutton(bool selected, const StringView label)
 	{
 		auto& window = getCurrentWindowImpl();
 		auto& radioButton = window.nextStatelessControl<RadioButton>();
@@ -2158,7 +2176,7 @@ namespace SasaGUI
 
 				Size labelSize = tab.label.region().size.asPoint();
 				tab.localRect.pos = tabPos;
-				tab.localRect.w = labelSize.x + Config::TabR * 2;
+				tab.localRect.w = Max(labelSize.x + Config::TabR * 2, Config::TabMinWidth);
 
 				tabPos.x += tab.localRect.w
 					+ Config::FrameThickness
@@ -2278,7 +2296,7 @@ namespace SasaGUI
 		}
 	};
 
-	size_t& GUIManager::tab(StringView id, Array<String> tabNames)
+	size_t& GUIManager::tab(const StringView id, Array<String> tabNames)
 	{
 		assert(tabNames);
 		auto& window = getCurrentWindowImpl();
